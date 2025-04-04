@@ -19,6 +19,8 @@
   "dependencies": {
     "@fastify/cors": "^10.0.2",
     "@prisma/client": "^6.2.1",
+    "@privy-io/public-api": "^2.20.5",
+    "@privy-io/server-auth": "^1.19.3",
     "@solana/wallet-standard-util": "^1.1.2",
     "@solana/web3.js": "^1.98.0",
     "axios": "^1.7.9",

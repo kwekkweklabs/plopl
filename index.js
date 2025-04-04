@@ -2,6 +2,7 @@ import "./dotenv.js";
 
 import Fastify from "fastify";
 import FastifyCors from "@fastify/cors";
+import { authRoutes } from "./src/routes/authRoutes.js";
 
 console.log(
   "======================\n======================\nPLOPL SYSTEM STARTED!\n======================\n======================\n"
@@ -23,6 +24,10 @@ fastify.get("/", async (request, reply) => {
     error: null,
     data: null,
   });
+});
+
+fastify.register(authRoutes, {
+  prefix: "/auth",
 });
 
 const start = async () => {
