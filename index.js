@@ -3,6 +3,7 @@ import "./dotenv.js";
 import Fastify from "fastify";
 import FastifyCors from "@fastify/cors";
 import { authRoutes } from "./src/routes/authRoutes.js";
+import { schemaRoute } from "./src/routes/schemaRoutes.js";
 
 console.log(
   "======================\n======================\nPLOPL SYSTEM STARTED!\n======================\n======================\n"
@@ -28,6 +29,10 @@ fastify.get("/", async (request, reply) => {
 
 fastify.register(authRoutes, {
   prefix: "/auth",
+});
+
+fastify.register(schemaRoute, {
+  prefix: "/schema",
 });
 
 const start = async () => {

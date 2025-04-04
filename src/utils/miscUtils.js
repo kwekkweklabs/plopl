@@ -1,3 +1,4 @@
+import { keccak256, toUtf8Bytes } from "ethers";
 import { customAlphabet } from "nanoid";
 
 export const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -12,4 +13,8 @@ export const getAlphanumericId = (length = 16) => {
 
 export const shortenAddress = (address, startLength = 6, endLength = 4) => {
   return address.slice(0, startLength) + "..." + address.slice(-endLength);
+}
+
+export const generateBytes32Id = (seedString) => {
+  return keccak256(toUtf8Bytes(seedString));
 }
