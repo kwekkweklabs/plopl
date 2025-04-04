@@ -14,18 +14,44 @@ export const CONFIG = {
   TELEGRAM_LINK: "",
 };
 
+const isTestnet = import.meta.env.VITE_IS_TESTNET === 'true'
 
-export const CHAINS = [
+export const CHAINS = isTestnet ? [
   {
     id: 84532,
     name: 'Base Sepolia Testnet',
-    logo: '/logo.png',
-    rpcUrl: 'https://sepolia.base.org'
+    logo: '/chain-base.png',
+    rpcUrl: `https://base-sepolia.nodit.io/${import.meta.env.VITE_NODIT_API_KEY}`
   },
   {
     id: 80002,
     name: 'Polygon Amoy Testnet',
-    logo: '/logo.png',
-    rpcUrl: 'https://polygon-amoy.drpc.org'
+    logo: '/chain-polygon.png',
+    rpcUrl: `https://polygon-amoy.nodit.io/${import.meta.env.VITE_NODIT_API_KEY}`
+  },
+  {
+    id: 48899,
+    name: 'Zircuit Testnet',
+    logo: '/chain-zircuit.png',
+    rpcUrl: `https://testnet.zircuit.com`
+  }
+] : [
+  {
+    id: 8453,
+    name: 'Base Mainnet',
+    logo: '/chain-base.png',
+    rpcUrl: `https://base-mainnet.nodit.io/${import.meta.env.VITE_NODIT_API_KEY}`
+  },
+  {
+    id: 80001,
+    name: 'Polygon Mainnet',
+    logo: '/chain-polygon.png',
+    rpcUrl: `https://polygon-mainnet.nodit.io/${import.meta.env.VITE_NODIT_API_KEY}`
+  },
+  {
+    id: 48900,
+    name: 'Zircuit Mainnet',
+    logo: '/chain-zircuit.png',
+    rpcUrl: `https://mainnet.zircuit.com`
   }
 ]

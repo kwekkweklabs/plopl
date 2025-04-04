@@ -1,15 +1,22 @@
 import { HeroUIProvider } from "@heroui/react";
 import QueryProvider from "./QueryProvider";
 import { baseSepolia, polygonAmoy, polygon, base } from 'viem/chains'
-import { PrivyProvider } from "@privy-io/react-auth";
+import { addRpcUrlOverrideToChain, PrivyProvider } from "@privy-io/react-auth";
+import { CHAINS } from "@/config";
 
 const isTestnet = import.meta.env.VITE_IS_TESTNET === 'true'
 export default function RootProvider({ children }) {
   let chains = [];
   if (isTestnet) {
-    chains = [baseSepolia, polygonAmoy]
+    const baseSepoliaNoditInjected = addRpcUrlOverrideToChain(baseSepolia, CHAINS.find(chain => chain.id === 84532).rpcUrl)
+    const polygonAmoyNoditInjected = addRpcUrlOverrideToChain(polygonAmoy, CHAINS.find(chain => chain.id === 80002).rpcUrl)
+
+    chains = [baseSepoliaNoditInjected, polygonAmoyNoditInjected]
   } else {
-    chains = [base, polygon]
+    const baseNoditInjected = addRpcUrlOverrideToChain(base, CHAINS.find(chain => chain.id === 8453).rpcUrl)
+    const polygonNoditInjected = addRpcUrlOverrideToChain(polygon, CHAINS.find(chain => chain.id === 80001).rpcUrl)
+
+    chains = [baseNoditInjected, polygonNoditInjected]
   }
 
   return (

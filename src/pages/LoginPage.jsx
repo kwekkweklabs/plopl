@@ -44,7 +44,7 @@ export default function LoginPage() {
   };
 
   const handleContinue = () => {
-    navigate("/dashboard");
+    navigate("/dashboard/home");
   };
 
   return (

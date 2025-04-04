@@ -1,3 +1,4 @@
+import AccountButton from '@/components/shared/AccountButton';
 import { CHAINS } from '@/config';
 import { useDashboard } from '@/providers/DashboardProvider';
 import { Button, Popover, PopoverContent, PopoverTrigger, Select, SelectItem } from '@heroui/react';
@@ -73,7 +74,7 @@ export default function DashboardLayout() {
         </nav>
 
         {/* Settings at bottom */}
-        <div className="p-4 border-t border-gray-200">
+        {/* <div className="p-4 border-t border-gray-200">
           <NavLink
             to="/dashboard/settings"
             className={({ isActive }) =>
@@ -86,7 +87,7 @@ export default function DashboardLayout() {
             </svg>
             Settings
           </NavLink>
-        </div>
+        </div> */}
       </div>
 
       {/* Main content */}
@@ -131,16 +132,10 @@ export default function DashboardLayout() {
             </PopoverContent>
           </Popover>
           <div>
-            <Button
-              color='primary'
-              radius='full'
-              size='lg'
-            >
-              <PlusCircleIcon />
-              Create Schema
-            </Button>
+            <AccountButton />
           </div>
         </div>
+
         <div className="p-6">
           <Outlet />
         </div>
