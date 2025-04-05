@@ -1,6 +1,7 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
+const { ethers: ether, AbiCoder } = require("ethers");
 
 describe("Plopl Registry System", function () {
     let ploplManager;
@@ -10,10 +11,12 @@ describe("Plopl Registry System", function () {
     let user;
     let ploplSigner;
     let recipeId;
+    let abiCoder;
 
     beforeEach(async function () {
         // Get signers
         [owner, notary, user, ploplSigner] = await ethers.getSigners();
+        abiCoder = new AbiCoder();
 
         // Deploy PloplManager
         const PloplManager = await ethers.getContractFactory("PloplManager");
@@ -44,6 +47,7 @@ describe("Plopl Registry System", function () {
             expect(isNotary).to.be.true;
         });
 
+
     });
 
     describe("Plop Submission", function () {
@@ -73,7 +77,7 @@ describe("Plopl Registry System", function () {
 
         it("should successfully submit a valid plop", async function () {
             await expect(
-                plopRegistry.submitPlop(
+                plopRegistry.connect(user).submitPlop(
                     plop,
                     ploplSignature,
                     notarySignature,
@@ -119,16 +123,33 @@ describe("Plopl Registry System", function () {
 
             const userSig = await user.signMessage(ethers.getBytes(combinedHash));
 
-            // Submit plop
-            await plopRegistry.submitPlop(plop, ploplSig, notarySig, userSig, []);
+            // Create two separate pieces of data
+            const data1 = abiCoder.encode(["string"], ["Hai"]);
+            const data2 = abiCoder.encode(["uint256"], [3]);
+
+            // Submit plop with array of raw bytes
+            await plopRegistry.connect(user).submitPlop(
+                plop,
+                ploplSig,
+                notarySig,
+                userSig,
+                [data1, data2]  // Pass array of individual encoded data
+            );
 
             // Recover data
-            const [recoveredHash, timestamp] = await plopRegistry.recoverUserPlopData(
+            const [recoveredHash, timestamp, rawPlop, notaryAddress, encData] = await plopRegistry.recoverUserPlopData(
                 user.address
             );
 
+            // Decode each piece of data separately
+            const decodedString = abiCoder.decode(["string"], encData[0])[0];
+            const decodedNumber = abiCoder.decode(["uint256"], encData[1])[0];
+            console.log("Decoded Data:", { string: decodedString, number: decodedNumber });
+
             expect(recoveredHash).to.equal(combinedHash);
             expect(timestamp).to.be.gt(0);
+            expect(decodedString).to.equal("Hai");
+            expect(decodedNumber).to.equal(3);
         });
 
         it("should fail to recover data for non-existent plop", async function () {
@@ -152,7 +173,7 @@ describe("Plopl Registry System", function () {
             );
             const userSig1 = await user.signMessage(ethers.getBytes(combined1));
 
-            await plopRegistry.submitPlop(plop1, ploplSig1, notarySig1, userSig1, []);
+            await plopRegistry.connect(user).submitPlop(plop1, ploplSig1, notarySig1, userSig1, []);
 
             // Submit second plop (should overwrite)
             const plop2 = ethers.keccak256(ethers.toUtf8Bytes("plop 2"));
@@ -166,7 +187,7 @@ describe("Plopl Registry System", function () {
             );
             const userSig2 = await user.signMessage(ethers.getBytes(combined2));
 
-            await plopRegistry.submitPlop(plop2, ploplSig2, notarySig2, userSig2, []);
+            await plopRegistry.connect(user).submitPlop(plop2, ploplSig2, notarySig2, userSig2, []);
 
             // Verify latest plop data
             const [recoveredHash] = await plopRegistry.recoverUserPlopData(user.address);
