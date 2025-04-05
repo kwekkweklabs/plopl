@@ -21,6 +21,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
   const [formData, setFormData] = useState({
     id: initialData.id || '',
     slug: initialData.slug || '',
+    name: initialData.name || '',
     description: initialData.description || '',
     prepareUrl: initialData.prepareUrl || '',
     request: {
@@ -541,7 +542,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
     
     // Pass only the schema to the parent component
     onSubmit({
-      name: formData.description, // Use description as name for now
+      name: formData.name || formData.description, // Fallback to description if name is not provided
       description: formData.description,
       schema: formData
     });
@@ -1217,14 +1218,6 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                 >
                   {loadingResponse ? 'Processing...' : 'Parse & Execute'}
                 </Button>
-                <Button 
-                  type="button" 
-                  onClick={testRequest}
-                  className="bg-green-500 hover:bg-green-600 text-white"
-                  disabled={!parsedCurl || loadingResponse}
-                >
-                  {loadingResponse ? 'Loading...' : 'Execute Again'}
-                </Button>
               </div>
             </div>
             
@@ -1512,6 +1505,18 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
               <h2 className="text-xl font-semibold mb-4">Recipe Details</h2>
               
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Name</label>
+                  <Input
+                    name="name"
+                    value={formData.name || ''}
+                    onChange={handleChange}
+                    placeholder="ETHGlobal Event Attendance"
+                    className="w-full"
+                  />
+                  <p className="text-gray-500 mt-1 text-xs">A short name for this recipe</p>
+                </div>
+                
                 <div>
                   <label className="block text-sm font-medium mb-2">Description</label>
                   <Textarea

@@ -16,7 +16,7 @@ const { worker, terminate } = (() => {
 })();
 
 export default function CreateSchemaPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, chainId } = useAuth();
   const [mode, setMode] = useState('gui'); // 'gui' or 'manual'
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -33,23 +33,28 @@ export default function CreateSchemaPage() {
       const payload = {
         name: data.name,
         description: data.description,
-        schema: data.schema
+        schema: data.schema,
+        chainId: chainId
       };
+
+      // Make the schema.slug, a sluggified name, 10 characters max
+      const slug = data.name.toLowerCase().replace(/ /g, '-').substring(0, 10);
+      payload.slug = slug;
 
       // Here would be the actual API call to create the schema
       console.log('Submitting schema:', payload);
 
       // Example API call (uncomment when endpoint is ready)
-      // const response = await axios.post(
-      //   `${import.meta.env.VITE_BACKEND_URL}/schema/create`, 
-      //   payload,
-      //   {
-      //     headers: {
-      //       Authorization: `Bearer ${accessToken}`,
-      //       'Content-Type': 'application/json'
-      //     }
-      //   }
-      // );
+      const response = await axios.post(
+        `${import.meta.env.VITE_BACKEND_URL}/schema/create`, 
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
       // Mock success for now
       await new Promise(resolve => setTimeout(resolve, 1000));
