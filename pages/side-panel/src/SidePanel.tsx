@@ -1,7 +1,9 @@
 import '@src/SidePanel.css';
 import { withErrorBoundary, withSuspense } from '@extension/shared';
 import { useState, useEffect, useRef } from 'react';
-import { BACKEND_URL, USER_WALLET_ADDRESS, CHAINS } from '../../constants';
+import { BACKEND_URL, USER_WALLET_ADDRESS, CHAINS, UW_PK } from '../../constants';
+import { ethers } from 'ethers';
+import { RegistryABI } from './lib/RegistryABI';
 
 // Schema types
 interface SchemaResponse {
@@ -71,6 +73,10 @@ const SidePanel = () => {
   const [capturedApiData, setCapturedApiData] = useState<CapturedApiData | null>(null);
   const [isCurrentlyOnTargetPage, setIsCurrentlyOnTargetPage] = useState(false);
   const [selectedChain, setSelectedChain] = useState(CHAINS[0]);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [isSubmittingOnchain, setIsSubmittingOnchain] = useState(false);
+  const [completedTxHash, setCompletedTxHash] = useState<string | null>(null);
 
   // Use a ref to prevent repetitive state updates during a single render cycle
   const processedUrlsRef = useRef<Set<string>>(new Set());
@@ -96,6 +102,7 @@ const SidePanel = () => {
     setApiMonitoringActive(false);
     processedUrlsRef.current.clear();
     hasSentSchemaRef.current = false;
+    setCompletedTxHash(null);
     // Keep ploplSchemaId and schemaData if they exist in the URL
     // Keep capturedApiData for reference but require the user to be on the target page again
   };
@@ -141,11 +148,15 @@ const SidePanel = () => {
       setSchemaData(data);
 
       // After fetching schema data, immediately check current tab
-      // in case we're already on the target page
       chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
         const currentTab = tabs[0];
         if (currentTab?.url) {
-          checkIsTargetPage(currentTab.url, data);
+          const isOnTarget = checkIsTargetPage(currentTab.url, data);
+          // If we're already on the target page, ensure we move to step 2
+          if (isOnTarget && currentStep === 1) {
+            setVisitedTargetPage(true);
+            setCurrentStep(2);
+          }
         }
       });
 
@@ -156,7 +167,6 @@ const SidePanel = () => {
     }
   };
 
-  // Separate function to check if a URL is the target page
   const checkIsTargetPage = (url: string, schema: SchemaResponse | null) => {
     if (!schema?.schema?.prepareUrl) return false;
 
@@ -174,10 +184,13 @@ const SidePanel = () => {
       // Update state to reflect if we're currently on target page
       setIsCurrentlyOnTargetPage(isOnTargetPage);
 
-      if (isOnTargetPage && !visitedTargetPage) {
-        setVisitedTargetPage(true);
+      if (isOnTargetPage) {
+        // Always mark as visited if we're on the target page
+        if (!visitedTargetPage) {
+          setVisitedTargetPage(true);
+        }
 
-        // Only advance to step 2 if we're currently on step 1
+        // Advance to step 2 if we're currently on step 1
         if (currentStep === 1) {
           setCurrentStep(2);
         }
@@ -292,16 +305,96 @@ const SidePanel = () => {
     }
   };
 
-  const mintProof = () => {
-    if (capturedApiData) {
-      console.log('Captured API data:', capturedApiData);
+  const mintProof = async () => {
+    console.log('Minting proof');
+    setIsVerifying(true);
+    setVerificationError(null);
 
-      // Only log this in development
-      if (process.env.NODE_ENV === 'development') {
+    try {
+      if (capturedApiData) {
+        console.log('Captured API data:', capturedApiData);
         console.log('API data being used for proof:', capturedApiData);
+        console.log('chainId:', selectedChain.id);
+        console.log('schemaData:', schemaData);
+
+        const bodyData = schemaData?.schema?.request?.args?.json;
+        capturedApiData.request.body = bodyData;
+
+        // Call http://localhost:3710/verify with all the captured data as body
+        const proof = await fetch(`http://localhost:3710/verify?schemaId=${ploplSchemaId}`, {
+          method: 'POST',
+          body: JSON.stringify(capturedApiData),
+        });
+
+        const response = await proof.json();
+        console.log('Proof:', response);
+
+        if (response.isValid) {
+          //   {
+          //     "isValid": true,
+          //     "s": {
+          //         "pSig": "0x99e274111f3ffa29c3c1a16ea54671cb2096fe2be0cd1fac26262db36e11d46341d5bba0384e8138cdd47eece76be566c5de6d67fcf5951f1553e2f6770ea05c1b",
+          //         "nSig": "0x99e274111f3ffa29c3c1a16ea54671cb2096fe2be0cd1fac26262db36e11d46341d5bba0384e8138cdd47eece76be566c5de6d67fcf5951f1553e2f6770ea05c1b",
+          //         "combinedHash": "0xb34b1d1d63bb0e46dc01fc1828513c37a2783952da6f3385faa4cd0c62c5f192",
+          //         "plop": "0xde11988d1d5d241f78b60a80d848a269a3b6ddb93258ce6587cee51dd55dc01b"
+          //     }
+          // }
+          // const mySig = await signer.signMessage(ethers.getBytes(combinedHash))
+
+          // const tx = await PloplRegistryContract.submitPlop(
+          //   ploplId,
+          //   pSig,
+          //   nSig,
+          //   mySig,
+          //   []
+          // )
+
+          // await tx.wait()
+
+          // Start the on-chain submission process
+          setIsSubmittingOnchain(true);
+
+          const _selectedChain = CHAINS.find(chain => chain.id === parseInt(selectedChain.id.toString()));
+          const provider = new ethers.JsonRpcProvider(_selectedChain?.rpcUrl);
+          const signer = new ethers.Wallet(UW_PK, provider);
+
+          const mySig = await signer.signMessage(ethers.getBytes(response.s.combinedHash));
+
+          const PlopRegistryContract = new ethers.Contract(_selectedChain?.registryContract || '', RegistryABI, signer);
+          console.log('PlopRegistryContract:', PlopRegistryContract);
+          const tx = await PlopRegistryContract.submitPlop(
+            response.s.plop,
+            response.s.pSig,
+            response.s.nSig,
+            mySig,
+            [],
+          );
+
+          console.log('Minting tx:', tx);
+          const receipt = await tx.wait();
+
+          // Store the transaction hash
+          setCompletedTxHash(receipt.hash);
+          console.log('Minting tx confirmed', tx);
+
+          setCurrentStep(4); // Done
+        } else {
+          // Verification failed
+          setVerificationError("You don't meet the current data requirements needed for this PLOP");
+        }
+      } else {
+        console.log('No API data captured');
+        setVerificationError(
+          'No API data was captured. Please interact with the page to trigger the necessary API calls.',
+        );
       }
+    } catch (error) {
+      console.error('Error minting proof:', error);
+      setVerificationError('An error occurred during verification. Please try again.');
+    } finally {
+      setIsVerifying(false);
+      setIsSubmittingOnchain(false);
     }
-    setCurrentStep(4); // Done
   };
 
   // Helper function to display request body data in a readable format
@@ -488,6 +581,11 @@ const SidePanel = () => {
       const currentTab = tabs[0];
       if (currentTab?.url) {
         checkForSchemaId(currentTab.url);
+
+        // Also check if we're already on the target page with existing schema
+        if (schemaDataRef.current) {
+          checkIsTargetPage(currentTab.url, schemaDataRef.current);
+        }
       }
     });
 
@@ -531,6 +629,79 @@ const SidePanel = () => {
 
   return (
     <div className="App bg-white p-3 min-h-screen text-sm">
+      {/* Blockchain transaction overlay */}
+      {isSubmittingOnchain && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full text-center">
+            <div className="flex flex-col items-center">
+              <div className="w-20 h-20 mb-4 relative">
+                <div className="absolute inset-0 bg-[#ff541e]/20 rounded-full animate-ping"></div>
+                <div className="relative bg-gradient-to-br from-[#ff541e] to-[#ff8a44] rounded-full w-full h-full flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="32"
+                    height="32"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-white animate-pulse">
+                    <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5l6.74-6.76z" />
+                    <line x1="16" x2="2" y1="8" y2="22" />
+                    <line x1="17.5" x2="9" y1="15" y2="15" />
+                  </svg>
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold text-[#ff541e] mb-2">Submitting your PLOP!</h3>
+              <p className="text-gray-600 text-sm mb-4">Your proof is being minted on-chain. Please wait...</p>
+              <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                <div className="h-full bg-[#ff541e] animate-progress"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction completed dialog */}
+      {completedTxHash && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full text-center">
+            <div className="flex flex-col items-center">
+              <div className="w-20 h-20 mb-4 bg-green-100 rounded-full flex items-center justify-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="36"
+                  height="36"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-green-500">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-green-600 mb-2">PLOP Submitted Successfully!</h3>
+              <p className="text-gray-600 text-sm mb-3">Your proof has been minted on-chain.</p>
+
+              <div className="bg-gray-50 p-3 rounded-md w-full mb-4">
+                <p className="text-xs text-gray-500 mb-1">Transaction Hash:</p>
+                <p className="text-xs font-mono break-all text-gray-800">{completedTxHash}</p>
+              </div>
+
+              <button
+                onClick={cancelFlow}
+                className="bg-[#ff541e] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#ff541e]/90 transition w-full">
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3">
         {/* Logo and wallet section */}
         <div className="flex flex-col gap-2">
@@ -662,8 +833,8 @@ const SidePanel = () => {
                 <div className="flex-1">
                   <h2 className="text-sm font-semibold mb-1 text-white">✨ {schemaData.name}</h2>
                   <p className="text-white/80 text-xs">{schemaData.schema.description}</p>
-                  <div className="flex items-center mt-2 bg-white/10 rounded-md px-2 py-1">
-                    <span className="text-white/70 text-[10px] mr-1">Schema ID:</span>
+                  <div className="flex flex-col mt-2 bg-white/10 rounded-md px-2 py-1">
+                    <span className="text-white/70 text-[10px] mr-1">recipeID:</span>
                     <span className="text-white text-[10px] font-mono">{schemaData.id}</span>
                   </div>
                 </div>
@@ -772,9 +943,9 @@ const SidePanel = () => {
                       <div className="text-yellow-600 text-xs mt-1">⚠️ Return to verification page to continue</div>
                     )}
 
-                    <button onClick={simulateApiCapture} className="text-xs text-[#ff541e] underline mt-1">
+                    {/* <button onClick={simulateApiCapture} className="text-xs text-[#ff541e] underline mt-1">
                       Debug: Simulate API capture
-                    </button>
+                    </button> */}
                   </div>
                 )}
                 {currentStep > 2 && (
@@ -818,11 +989,27 @@ const SidePanel = () => {
                     )}
 
                     {isCurrentlyOnTargetPage ? (
-                      <button
-                        onClick={mintProof}
-                        className="ml-7 bg-[#ff541e] text-white px-2 py-1 rounded-md text-xs font-medium hover:bg-[#ff541e]/90 transition">
-                        Submit PLOP
-                      </button>
+                      <>
+                        <button
+                          onClick={mintProof}
+                          disabled={isVerifying}
+                          className="ml-7 bg-[#ff541e] text-white px-2 py-1 rounded-md text-xs font-medium hover:bg-[#ff541e]/90 transition disabled:opacity-70 flex items-center">
+                          {isVerifying ? (
+                            <>
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2"></div>
+                              <span>Verifying...</span>
+                            </>
+                          ) : (
+                            'Submit PLOP'
+                          )}
+                        </button>
+
+                        {verificationError && (
+                          <div className="ml-7 mt-2 bg-red-50 border border-red-100 rounded-md p-2 text-xs text-red-600">
+                            ⚠️ {verificationError}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="ml-7 text-yellow-600 text-xs">⚠️ Return to verification page to mint proof</div>
                     )}
@@ -885,7 +1072,7 @@ const SidePanel = () => {
                 <strong>Current URL:</strong> {currentUrl || 'None'}
               </div>
               <div>
-                <strong>Schema ID:</strong> {ploplSchemaId || 'None'}
+                <strong>recipeID:</strong> {ploplSchemaId || 'None'}
               </div>
               <div>
                 <strong>Current Step:</strong> {currentStep}

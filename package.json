@@ -39,6 +39,7 @@
     "module-manager": "pnpm -F module-manager start"
   },
   "dependencies": {
+    "ethers": "^6.13.5",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
