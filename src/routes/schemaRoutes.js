@@ -5,6 +5,7 @@ import { generateBytes32Id, getAlphanumericId } from "../utils/miscUtils.js";
 import axios from "axios";
 import { CHAINS } from '../../config.js';
 import { RegistryABI } from '../lib/RegistryABI.js';
+import { ethers } from "ethers";
 
 /**
  *
@@ -28,7 +29,15 @@ export const schemaRoute = (app, _, done) => {
     const { id } = request.params;
 
     const schema = await prismaQuery.schema.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        usages: true,
+        _count: {
+          select: {
+            usages: true
+          }
+        }
+      }
     })
 
     return reply.status(200).send(schema)
@@ -70,51 +79,93 @@ export const schemaRoute = (app, _, done) => {
     return reply.status(200).send(schemas)
   })
 
+  app.get('/my-schemas-usage', async (request, reply) => {
+    const { address } = request.query;
 
-  app.get('/index-plopls', async (request, reply) => {
-    try {
-      const { chainId, registryAddress } = request.query;
-
-    const selectedChain = CHAINS.find(chain => chain.id === parseInt(chainId));
-
-    if (!selectedChain) {
-      return reply.status(400).send({ error: 'Chain not found' });
-    }
-
-    if (parseInt(chainId) === 84532 || parseInt(chainId) === 80002) {
-      let protocol = ''
-      let network = ''
-      if (parseInt(chainId) === 84532) {
-        protocol = 'base'
-        network = 'sepolia'
-      } else {
-        protocol = 'polygon'
-        network = 'amoy'
+    const usages = await prismaQuery.schemaUsages.findMany({
+      where: { userAddress: address },
+      include: {
+        schema: {
+          select: {
+            id: true,
+            name: true,
+            chainId: true,
+            registryId: true,
+            registryAddress: true,
+            description: true
+          }
+        }
       }
+    })
 
-      console.log(`Indexing ${protocol} ${network} plopls`)
-      const res = await axios({
-        method: 'POST',
-        url: `https://web3.nodit.io/v1/${protocol}/${network}/blockchain/searchEvents`,
-        headers: {
-          'X-API-KEY': process.env.NODIT_API_KEY
-        },
-        data: {
-          contractAddress: registryAddress,
-          eventNames: [
-            "PlopSubmitted"
-          ],
-          abi: RegistryABI
-        },
-        // 2 days ago
-        fromDate: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-        toDate: new Date().toISOString()
+    return reply.status(200).send(usages)
+  })
+
+  app.get('/log-tx', async (request, reply) => {
+    try {
+      const { txHash, chainId } = request.query;
+
+      const checkExists = await prismaQuery.schemaUsages.findFirst({
+        where: {
+          txHash
+        }
       })
 
-      console.log(res.data)
-    }
+      if (checkExists) {
+        return reply.status(200).send({ error: 'Tx already exists' })
+      }
 
-      return reply.status(200).send('Indexing completed')
+
+
+      const selectedChain = CHAINS.find(chain => chain.id === parseInt(chainId));
+      if (!selectedChain) {
+        return reply.status(400).send({ error: 'Chain not found' });
+      }
+
+      const provider = new ethers.JsonRpcProvider(selectedChain.rpc);
+      const tx = await provider.getTransactionReceipt(txHash);
+
+      console.log(tx)
+
+      const log = tx.logs[0];
+      const user = tx.from;
+
+      const schema = await prismaQuery.schema.findFirst({
+        where: {
+          registryAddress: tx.to
+        }
+      })
+
+      if (!schema) {
+        return reply.status(400).send({ error: 'Schema not found' })
+      }
+
+      // If there is already a userAddress with the same  registryAddress, then need to update the previous one,
+      // update the txHash, blockNumber, and timestamp
+      const existingUsage = await prismaQuery.schemaUsages.findFirst({
+        where: {
+          userAddress: user,
+          schemaId: schema.id
+        }
+      })
+
+      if (existingUsage) {
+        await prismaQuery.schemaUsages.update({
+          where: { id: existingUsage.id },
+          data: { txHash: txHash, blockNumber: tx.blockNumber }
+        })
+      } else {
+        await prismaQuery.schemaUsages.create({
+          data: {
+            userAddress: user,
+            schemaId: schema.id,
+            txHash: txHash,
+            blockNumber: tx.blockNumber,
+          }
+        })
+      }
+
+      return reply.status(200).send({ success: true })
     } catch (error) {
       console.log(error)
       return reply.status(500).send({ error: 'Error indexing plopls' })

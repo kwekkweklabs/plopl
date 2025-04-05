@@ -46,11 +46,16 @@ model Schema {
 }
 
 model SchemaUsages {
-  id       String @id
+  id       String @id @default(cuid())
+  
   schemaId String
-
   schema Schema @relation(fields: [schemaId], references: [id])
 
+  userAddress String
+  txHash String
+  blockNumber Int
+  timestamp DateTime @default(now())
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
