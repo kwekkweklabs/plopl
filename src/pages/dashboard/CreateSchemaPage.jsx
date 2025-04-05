@@ -1,6 +1,7 @@
 import { useAuth } from '@/providers/AuthProvider';
 import { Button } from '@heroui/react';
 import React, { useState } from 'react';
+import axios from 'axios';
 import CreateSchemaGUI from './CreateSchemaGUI';
 import CreateSchemaManual from './CreateSchemaManual';
 
