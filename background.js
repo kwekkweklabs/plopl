@@ -1,53 +1,11 @@
-import 'webextension-polyfill';
-
-// Define types for request details
-interface RequestDetails {
-  url: string;
-  method: string;
-  requestBody?: {
-    raw?: {
-      bytes: ArrayBuffer;
-    }[];
-  };
-  tabId: number;
-  requestId: string;
-  type: string;
-}
-
-interface CompletedDetails {
-  url: string;
-  statusCode: number;
-  statusLine: string;
-}
-
-interface ApiDataEntry {
-  timestamp: string;
-  url: string;
-  method: string;
-  requestBody: unknown;
-  responseBody: unknown | null;
-  tabId: number;
-  requestId: string;
-  type: string;
-  status?: number;
-  statusText?: string;
-}
-
-interface SchemaData {
-  id: string;
-  schema: {
-    request: {
-      url: string;
-      method: string;
-    };
-  };
-}
+// PLOPL Background Service Worker
+// This script uses chrome.webRequest to monitor network traffic for specific APIs
 
 // Global variables to track monitoring state and captured data
-let activeSchemaId: string | null = null;
-let targetApiUrl: string | null = null;
-let targetApiMethod: string | null = null;
-let capturedApiData: Record<string, ApiDataEntry> = {};
+let activeSchemaId = null;
+let targetApiUrl = null;
+let targetApiMethod = null;
+let capturedApiData = {};
 
 // Storage key for captured API data to persist across restarts
 const STORAGE_KEY = 'ploplCapturedApiData';
@@ -60,18 +18,16 @@ chrome.storage.local.get([STORAGE_KEY], result => {
   }
 });
 
-console.log('background script loaded');
-
 // Listen for all web requests before they're sent
 chrome.webRequest.onBeforeRequest.addListener(
-  (details: RequestDetails) => {
+  details => {
     // We need both the request URL and the request body for complete monitoring
     if (details.url.includes('api2.ethglobal.com/graphql')) {
       console.log('Detected ethglobal API request:', details.url);
 
       // Attempt to parse the request body if it exists
       let requestBody = null;
-      if (details.requestBody && details.requestBody.raw && details.requestBody.raw.length > 0) {
+      if (details.requestBody && details.requestBody.raw) {
         try {
           const decoder = new TextDecoder();
           const rawBody = details.requestBody.raw[0].bytes;
@@ -113,7 +69,7 @@ chrome.webRequest.onBeforeRequest.addListener(
 
 // Listen for responses to capture response data
 chrome.webRequest.onCompleted.addListener(
-  (details: CompletedDetails) => {
+  details => {
     if (details.url.includes('api2.ethglobal.com/graphql') && capturedApiData[details.url]) {
       console.log('Completed ethglobal API request:', details.url);
 
@@ -137,7 +93,7 @@ chrome.webRequest.onCompleted.addListener(
 );
 
 // Notify the side panel about captured API data
-function notifySidePanel(url: string, data: ApiDataEntry) {
+function notifySidePanel(url, data) {
   // Send a message to any open side panels
   chrome.runtime
     .sendMessage({
@@ -156,7 +112,7 @@ function notifySidePanel(url: string, data: ApiDataEntry) {
 }
 
 // Listen for messages from the side panel or content scripts
-chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Background received message:', message.action);
 
   if (message.action === 'ping') {
@@ -167,16 +123,15 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
 
   if (message.action === 'setSchemaData' && message.data?.schema?.request) {
     // Store the target API details
-    const schemaData = message.data as SchemaData;
-    targetApiUrl = schemaData.schema.request.url;
-    targetApiMethod = schemaData.schema.request.method;
-    activeSchemaId = schemaData.id;
+    targetApiUrl = message.data.schema.request.url;
+    targetApiMethod = message.data.schema.request.method;
+    activeSchemaId = message.data.id;
 
     console.log(`Now monitoring for ${targetApiMethod} requests to ${targetApiUrl}`);
 
     // Check if we've already captured data for this API
     const matches = Object.entries(capturedApiData).filter(
-      ([url]) => targetApiUrl && (url.includes(targetApiUrl) || targetApiUrl.includes(url)),
+      ([url, data]) => url.includes(targetApiUrl) || targetApiUrl.includes(url),
     );
 
     if (matches.length > 0) {

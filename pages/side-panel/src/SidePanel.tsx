@@ -45,8 +45,20 @@ interface CapturedApiData {
   timestamp: string;
   url: string;
   method: string;
-  request: unknown;
-  response: unknown;
+  request: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body: unknown;
+    timestamp: string;
+  };
+  response: {
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    body: unknown;
+    timestamp: string;
+  };
 }
 
 const SidePanel = () => {
@@ -57,6 +69,7 @@ const SidePanel = () => {
   const [visitedTargetPage, setVisitedTargetPage] = useState(false);
   const [apiMonitoringActive, setApiMonitoringActive] = useState(false);
   const [capturedApiData, setCapturedApiData] = useState<CapturedApiData | null>(null);
+  const [isCurrentlyOnTargetPage, setIsCurrentlyOnTargetPage] = useState(false);
 
   // Use a ref to prevent repetitive state updates during a single render cycle
   const processedUrlsRef = useRef<Set<string>>(new Set());
@@ -79,17 +92,18 @@ const SidePanel = () => {
   const resetState = () => {
     setCurrentStep(1);
     setVisitedTargetPage(false);
-    setCapturedApiData(null);
     setApiMonitoringActive(false);
     processedUrlsRef.current.clear();
     hasSentSchemaRef.current = false;
     // Keep ploplSchemaId and schemaData if they exist in the URL
+    // Keep capturedApiData for reference but require the user to be on the target page again
   };
 
   const cancelFlow = () => {
     resetState();
     setPloplSchemaId(null);
     setSchemaData(null);
+    setCapturedApiData(null);
 
     // Also clear from localStorage if present
     try {
@@ -156,6 +170,9 @@ const SidePanel = () => {
 
       const isOnTargetPage = hostnameMatches && pathMatches;
 
+      // Update state to reflect if we're currently on target page
+      setIsCurrentlyOnTargetPage(isOnTargetPage);
+
       if (isOnTargetPage && !visitedTargetPage) {
         setVisitedTargetPage(true);
 
@@ -165,6 +182,14 @@ const SidePanel = () => {
         }
 
         return true;
+      }
+
+      // If we're not on the target page anymore but we were in a later step,
+      // reset back to step 1 with a warning
+      if (!isOnTargetPage && currentStep > 1) {
+        console.log('No longer on target page, resetting to step 1');
+        setCurrentStep(1);
+        setVisitedTargetPage(false);
       }
 
       return isOnTargetPage;
@@ -216,8 +241,8 @@ const SidePanel = () => {
 
       setCurrentUrl(url);
 
-      // Always check if we've visited the target page when in step 1
-      if (currentSchema && currentStep === 1) {
+      // Always check if we've visited the target page
+      if (currentSchema) {
         checkIsTargetPage(url, currentSchema);
       }
 
@@ -268,6 +293,8 @@ const SidePanel = () => {
 
   const mintProof = () => {
     if (capturedApiData) {
+      console.log('Captured API data:', capturedApiData);
+
       // Only log this in development
       if (process.env.NODE_ENV === 'development') {
         console.log('API data being used for proof:', capturedApiData);
@@ -278,15 +305,41 @@ const SidePanel = () => {
 
   // Simulate API data capture (for testing only - remove in production)
   const simulateApiCapture = () => {
-    const mockData = {
+    const mockData: CapturedApiData = {
       timestamp: new Date().toISOString(),
       url: schemaData?.schema?.request?.url || 'https://api.example.com',
       method: schemaData?.schema?.request?.method || 'POST',
-      request: { query: 'example query' },
-      response: { data: { example: 'response data' } },
+      request: {
+        url: schemaData?.schema?.request?.url || 'https://api.example.com',
+        method: schemaData?.schema?.request?.method || 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'User-Agent': 'Mozilla/5.0',
+        },
+        body: { query: 'example query' },
+        timestamp: new Date().toISOString(),
+      },
+      response: {
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
+        body: { data: { example: 'response data' } },
+        timestamp: new Date().toISOString(),
+      },
     };
-    setCapturedApiData(mockData as CapturedApiData);
-    setCurrentStep(3);
+    setCapturedApiData(mockData);
+
+    // Only proceed to step 3 if currently on target page
+    if (isCurrentlyOnTargetPage) {
+      setCurrentStep(3);
+    } else {
+      setCurrentStep(1);
+      console.log("Can't proceed to next step: Not on verification page");
+    }
   };
 
   // Send schema data to background script for API monitoring
@@ -335,18 +388,40 @@ const SidePanel = () => {
 
     // Create new message listener
     const messageListener = (message: MessageWithAction) => {
+      console.log('SidePanel received message:', message);
+
       // Only process relevant messages
       if (!message || typeof message !== 'object' || !message.action) {
+        console.log('Invalid message format received');
         return;
       }
 
       if (message.action === 'apiDataCaptured' && message.data) {
+        console.log('API data captured message received with data:', message.data);
+
+        // Always update the data regardless of URL format
         setCapturedApiData(message.data as CapturedApiData);
 
-        // Move to step 3 once API is captured
-        if (currentStep === 2) {
-          setCurrentStep(3);
-        }
+        // Get current URL to check if we're still on the target page
+        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+          const currentTab = tabs[0];
+          if (currentTab?.url && schemaDataRef.current) {
+            const stillOnTargetPage = checkIsTargetPage(currentTab.url, schemaDataRef.current);
+
+            // Only move to step 3 if currently on the verification page
+            if (currentStep === 2 && stillOnTargetPage) {
+              console.log('Still on target page, moving from step 2 to step 3');
+              setCurrentStep(3);
+            } else if (!stillOnTargetPage) {
+              console.log('No longer on verification page, staying at step 1');
+              setCurrentStep(1);
+            } else {
+              console.log('Not changing step because current step is', currentStep);
+            }
+          } else {
+            console.log('Could not determine current URL or schema data, staying at current step');
+          }
+        });
       }
     };
 
@@ -355,11 +430,23 @@ const SidePanel = () => {
 
     // Add the listener
     chrome.runtime.onMessage.addListener(messageListener);
+    console.log('Side panel message listener registered');
+
+    // Ping the background script to check connection
+    chrome.runtime
+      .sendMessage({ action: 'ping' })
+      .then(response => {
+        console.log('Background script ping response:', response);
+      })
+      .catch(err => {
+        console.error('Failed to ping background script:', err);
+      });
 
     // Cleanup on unmount
     return () => {
       if (messageListenerRef.current) {
         chrome.runtime.onMessage.removeListener(messageListenerRef.current);
+        console.log('Side panel message listener removed');
       }
     };
   }, [currentStep]);
@@ -390,9 +477,21 @@ const SidePanel = () => {
 
     chrome.tabs.onUpdated.addListener(tabUpdateListener);
 
+    // Listen for tab activation to detect when user switches tabs
+    const tabActivatedListener = (activeInfo: chrome.tabs.TabActiveInfo) => {
+      chrome.tabs.get(activeInfo.tabId, tab => {
+        if (tab.url) {
+          checkForSchemaId(tab.url);
+        }
+      });
+    };
+
+    chrome.tabs.onActivated.addListener(tabActivatedListener);
+
     // Cleanup listener on unmount
     return () => {
       chrome.tabs.onUpdated.removeListener(tabUpdateListener);
+      chrome.tabs.onActivated.removeListener(tabActivatedListener);
     };
   }, []);
 
@@ -437,7 +536,23 @@ const SidePanel = () => {
 
             {/* Status bar */}
             <div
-              className={`flex items-center gap-2 px-2 py-1 rounded-md ${apiMonitoringActive ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'}`}>
+              className={`flex items-center gap-2 px-2 py-1 rounded-md ${
+                isCurrentlyOnTargetPage ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'
+              }`}>
+              <div
+                className={`w-2 h-2 rounded-full ${isCurrentlyOnTargetPage ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+              <p className="text-xs">
+                {isCurrentlyOnTargetPage
+                  ? 'On verification page'
+                  : 'Not on verification page - you must return to proceed'}
+              </p>
+            </div>
+
+            {/* API monitoring status */}
+            <div
+              className={`flex items-center gap-2 px-2 py-1 rounded-md ${
+                apiMonitoringActive ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'
+              }`}>
               <div className={`w-2 h-2 rounded-full ${apiMonitoringActive ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
               <p className="text-xs">
                 {apiMonitoringActive ? 'Network monitoring active' : 'Preparing network monitoring...'}
@@ -473,6 +588,12 @@ const SidePanel = () => {
                       className="ml-7 bg-[#ff541e] text-white px-2 py-1 rounded-md text-xs font-medium hover:bg-[#ff541e]/90 transition">
                       Open URL
                     </button>
+
+                    {!isCurrentlyOnTargetPage && capturedApiData && (
+                      <div className="ml-7 mt-2 text-yellow-600 text-xs">
+                        <p>⚠️ You've captured data but navigated away. Return to verification page to continue.</p>
+                      </div>
+                    )}
                   </>
                 )}
                 {currentStep > 1 && (
@@ -508,6 +629,11 @@ const SidePanel = () => {
                       <span>Monitoring network requests...</span>
                     </div>
                     <div className="text-xs text-gray-500">Interact with the page to trigger API calls</div>
+
+                    {!isCurrentlyOnTargetPage && (
+                      <div className="text-yellow-600 text-xs mt-1">⚠️ Return to verification page to continue</div>
+                    )}
+
                     <button onClick={simulateApiCapture} className="text-xs text-[#ff541e] underline mt-1">
                       Debug: Simulate API capture
                     </button>
@@ -538,11 +664,17 @@ const SidePanel = () => {
                 </div>
                 <p className="text-xs text-gray-600 ml-7 mb-1 text-left">Once data is collected, mint your proof</p>
                 {currentStep === 3 && (
-                  <button
-                    onClick={mintProof}
-                    className="ml-7 bg-[#ff541e] text-white px-2 py-1 rounded-md text-xs font-medium hover:bg-[#ff541e]/90 transition">
-                    Mint Proof
-                  </button>
+                  <>
+                    {isCurrentlyOnTargetPage ? (
+                      <button
+                        onClick={mintProof}
+                        className="ml-7 bg-[#ff541e] text-white px-2 py-1 rounded-md text-xs font-medium hover:bg-[#ff541e]/90 transition">
+                        Mint Proof
+                      </button>
+                    ) : (
+                      <div className="ml-7 text-yellow-600 text-xs">⚠️ Return to verification page to mint proof</div>
+                    )}
+                  </>
                 )}
                 {currentStep > 3 && (
                   <p className="text-xs text-green-600 ml-7 text-left">✓ Proof minted successfully</p>
@@ -583,6 +715,9 @@ const SidePanel = () => {
               </div>
               <div>
                 <strong>Visited Target:</strong> {visitedTargetPage ? 'Yes' : 'No'}
+              </div>
+              <div>
+                <strong>Currently On Target:</strong> {isCurrentlyOnTargetPage ? 'Yes' : 'No'}
               </div>
               <div>
                 <strong>API Monitoring:</strong> {apiMonitoringActive ? 'Active' : 'Inactive'}
