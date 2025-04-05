@@ -720,6 +720,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
               {displayValue}
               {isLongText && (
                 <button 
+                  type="button"
                   onClick={(e) => toggleExpand(e, path)} 
                   className="ml-1 text-gray-500 underline text-[10px]"
                 >
@@ -764,6 +765,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
             onMouseLeave={() => !hasFindOpen && setHoveredPath(null)}
           >
             <button 
+              type="button"
               onClick={() => toggleCollapse(path)}
               className="mr-1 w-4 h-4 flex items-center justify-center rounded hover:bg-gray-100 transition-colors focus:outline-none"
             >
@@ -789,6 +791,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
               {isArray && (isHovered || hasFindOpen) && (
                 <span className="ml-1 inline-flex gap-1">
                   <button 
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       // Update path to include [] for array notation per schema requirements
@@ -801,6 +804,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                   {value.length > 0 && typeof value[0] === 'object' && value[0] !== null && (
                     <div className="relative inline-block">
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation(); 
                           e.preventDefault();
@@ -835,6 +839,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                             return (
                               <button
                                 key={propKey}
+                                type="button"
                                 className={`text-[10px] ${bgColor} px-2 py-1 rounded-md text-left truncate`}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -909,6 +914,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                         {isArrayValue && isPropHovered && (
                           <div className="ml-2 inline-flex items-center gap-1">
                             <button 
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 // Update path to include [] for array notation per schema requirements
@@ -964,6 +970,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
               </div>
               <div className="flex flex-wrap gap-1">
                 <button
+                  type="button"
                   className="text-[10px] bg-primary-50 text-primary-600 px-2 py-0.5 rounded-full hover:bg-primary-100 transition-colors"
                   onClick={() => handleSelectField(`${path}.length()`, data.length)}
                 >
@@ -979,6 +986,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                     return (
                       <button
                         key={propKey}
+                        type="button"
                         className="text-[10px] bg-primary-50 text-primary-600 px-2 py-0.5 rounded-full hover:bg-primary-100 transition-colors"
                         onClick={() => {
                           const foundItem = data.find(item => item[propKey]);
@@ -1365,6 +1373,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                   <>
                     <h2 className="text-xl font-semibold">Select fields to match</h2>
                     <button 
+                      type="button"
                       onClick={toggleFullscreen}
                       className="bg-gray-500 text-white text-sm px-3 py-1 rounded hover:bg-gray-600 flex items-center"
                     >
@@ -1383,6 +1392,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                       </span>
                     </div>
                     <button 
+                      type="button"
                       onClick={toggleFullscreen}
                       className="bg-gray-500 text-white text-sm px-3 py-1 rounded hover:bg-gray-600 flex items-center"
                     >

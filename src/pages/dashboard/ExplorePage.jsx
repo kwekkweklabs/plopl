@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Input, Button } from '@heroui/react';
+import { useNavigate } from 'react-router';
 
 export default function ExplorePage() {
   const [recipes, setRecipes] = useState([]);
@@ -41,6 +42,8 @@ export default function ExplorePage() {
       setTimeout(() => setCopiedId(null), 2000);
     });
   };
+
+  const navigate = useNavigate();
 
   return (
     <div className="space-y-6">
@@ -145,7 +148,9 @@ export default function ExplorePage() {
                         Verification Recipe
                       </div>
                       
-                      <Button className="bg-orange-500 hover:bg-orange-600 text-white transition-colors px-4 py-2 rounded-lg">
+                      <Button 
+                        onClick={() => navigate(`/dashboard/recipe/${recipe.id}`)}
+                      className="bg-orange-500 hover:bg-orange-600 text-white transition-colors px-4 py-2 rounded-lg">
                         View Details
                       </Button>
                     </div>

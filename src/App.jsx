@@ -10,6 +10,7 @@ import DashboardProvider from "./providers/DashboardProvider";
 import CreateSchemaPage from "./pages/dashboard/CreateSchemaPage";
 import AuthProvider, { ProtectedRoute, useAuth } from "./providers/AuthProvider";
 import ExperimentPage from "./pages/dashboard/ExperimentPage";
+import RecipePage from "./pages/dashboard/RecipePage";
 
 // Component to handle root path redirection based on auth status
 function RootRedirect() {
@@ -34,6 +35,7 @@ export default function App() {
                 <Route index element={<Navigate to="/dashboard/home" replace />} />
                 <Route path="home" element={<HomePage />} />
                 <Route path="explore" element={<ExplorePage />} />
+                <Route path="recipe/:id" element={<RecipePage />} />
                 <Route path="create-schema" element={<CreateSchemaPage />} />
                 <Route path="experiment" element={<ExperimentPage />} />
               </Route>

@@ -70,41 +70,6 @@ export default function CreateSchemaPage() {
 
       const selectedChain = CHAINS.find(chain => chain.id === parseInt(chainId))
 
-      // const PloplRegistryContract = new ethers.Contract(
-      //   selectedChain.registryContract,
-      //   RegistryABI,
-      //   signer
-      // )
-
-      // const seedString = `${userAddress}-${payload.slug}-${payload.chainId}-${new Date().getTime()}`
-      // const ploplId = generateBytes32Id(seedString)
-
-      // // signer from private key on import.meta.env.VITE_PSPK, pk
-      // const _provider = new ethers.JsonRpcProvider(selectedChain.rpcUrl)
-      // const psw = new Wallet(import.meta.env.VITE_PSPK, _provider)
-
-      // const pSig = await psw.signMessage(ethers.getBytes(ploplId))
-      // const nSig = await psw.signMessage(ethers.getBytes(ploplId))
-
-      // const combinedHash = ethers.keccak256(
-      //   ethers.solidityPacked(
-      //     ["bytes32", "bytes", "bytes"],
-      //     [ploplId, pSig, nSig]
-      //   )
-      // )
-
-      // const mySig = await signer.signMessage(ethers.getBytes(combinedHash))
-
-      // const tx = await PloplRegistryContract.submitPlop(
-      //   ploplId,
-      //   pSig,
-      //   nSig,
-      //   mySig,
-      //   []
-      // )
-
-      // await tx.wait()
-
       const _provider = new ethers.JsonRpcProvider(selectedChain.rpcUrl)
       const psw = new Wallet(import.meta.env.VITE_PSPK, _provider)
 
