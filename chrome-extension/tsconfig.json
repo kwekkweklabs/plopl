@@ -3,8 +3,15 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@src/*": ["src/*"]
+      "@src/*": ["../bash-scripts/src/*"]
     }
   },
-  "include": ["src", "utils", "vite.config.mts", "manifest.ts", "../node_modules/@types"]
+  "include": [
+    "../bash-scripts/src",
+    "utils",
+    "vite.config.mts",
+    "manifest.ts",
+    "../node_modules/@types",
+    "../bash-scripts/src/background"
+  ]
 }

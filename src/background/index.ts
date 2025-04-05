@@ -1,11 +1,53 @@
-// PLOPL Background Service Worker
-// This script uses chrome.webRequest to monitor network traffic for specific APIs
+import 'webextension-polyfill';
+
+// Define types for request details
+interface RequestDetails {
+  url: string;
+  method: string;
+  requestBody?: {
+    raw?: {
+      bytes: ArrayBuffer;
+    }[];
+  };
+  tabId: number;
+  requestId: string;
+  type: string;
+}
+
+interface CompletedDetails {
+  url: string;
+  statusCode: number;
+  statusLine: string;
+}
+
+interface ApiDataEntry {
+  timestamp: string;
+  url: string;
+  method: string;
+  requestBody: unknown;
+  responseBody: unknown | null;
+  tabId: number;
+  requestId: string;
+  type: string;
+  status?: number;
+  statusText?: string;
+}
+
+interface SchemaData {
+  id: string;
+  schema: {
+    request: {
+      url: string;
+      method: string;
+    };
+  };
+}
 
 // Global variables to track monitoring state and captured data
 let activeSchemaId: string | null = null;
 let targetApiUrl: string | null = null;
 let targetApiMethod: string | null = null;
-const capturedApiData: Record<string, any> = {};
+let capturedApiData: Record<string, ApiDataEntry> = {};
 
 // Storage key for captured API data to persist across restarts
 const STORAGE_KEY = 'ploplCapturedApiData';
@@ -13,14 +55,16 @@ const STORAGE_KEY = 'ploplCapturedApiData';
 // Initialize by checking storage for any previously captured data
 chrome.storage.local.get([STORAGE_KEY], result => {
   if (result[STORAGE_KEY]) {
-    Object.assign(capturedApiData, result[STORAGE_KEY]);
+    capturedApiData = result[STORAGE_KEY];
     console.log('Loaded previously captured API data:', capturedApiData);
   }
 });
 
+console.log('background script loaded');
+
 // Listen for all web requests before they're sent
 chrome.webRequest.onBeforeRequest.addListener(
-  details => {
+  (details: RequestDetails) => {
     // We need both the request URL and the request body for complete monitoring
     if (details.url.includes('api2.ethglobal.com/graphql')) {
       console.log('Detected ethglobal API request:', details.url);
@@ -69,7 +113,7 @@ chrome.webRequest.onBeforeRequest.addListener(
 
 // Listen for responses to capture response data
 chrome.webRequest.onCompleted.addListener(
-  details => {
+  (details: CompletedDetails) => {
     if (details.url.includes('api2.ethglobal.com/graphql') && capturedApiData[details.url]) {
       console.log('Completed ethglobal API request:', details.url);
 
@@ -93,7 +137,7 @@ chrome.webRequest.onCompleted.addListener(
 );
 
 // Notify the side panel about captured API data
-function notifySidePanel(url: string, data: any) {
+function notifySidePanel(url: string, data: ApiDataEntry) {
   // Send a message to any open side panels
   chrome.runtime
     .sendMessage({
@@ -112,7 +156,7 @@ function notifySidePanel(url: string, data: any) {
 }
 
 // Listen for messages from the side panel or content scripts
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
   console.log('Background received message:', message.action);
 
   if (message.action === 'ping') {
@@ -123,9 +167,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'setSchemaData' && message.data?.schema?.request) {
     // Store the target API details
-    targetApiUrl = message.data.schema.request.url;
-    targetApiMethod = message.data.schema.request.method;
-    activeSchemaId = message.data.id;
+    const schemaData = message.data as SchemaData;
+    targetApiUrl = schemaData.schema.request.url;
+    targetApiMethod = schemaData.schema.request.method;
+    activeSchemaId = schemaData.id;
 
     console.log(`Now monitoring for ${targetApiMethod} requests to ${targetApiUrl}`);
 
@@ -150,9 +195,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'clearApiData') {
-    Object.keys(capturedApiData).forEach(key => {
-      delete capturedApiData[key];
-    });
+    capturedApiData = {};
     chrome.storage.local.remove(STORAGE_KEY);
     console.log('Cleared all captured API data');
     sendResponse({ success: true });
@@ -164,4 +207,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // Log when the background script is loaded
-console.log('PLOPL background script loaded and ready!');
+console.log('PLOPL background script loaded and ready');
