@@ -45,22 +45,45 @@ export default function LoginPage() {
 
   const handleContinue = () => {
     navigate("/dashboard/home");
-  };
+  }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center text-center py-12 bg-gradient-to-br from-slate-50 to-slate-100">
-      <div className="mb-12 text-center max-w-3xl">
-        <h1 className="font-black mb-1 leading-tight">
-          <div className="text-2xl text-black">
+    <div className="min-h-screen flex flex-col items-center justify-center text-center py-12 bg-gradient-to-br from-slate-50 to-slate-100 relative overflow-hidden">
+      {/* Subtle decorative elements */}
+      <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-orange-500/10 to-orange-600/5 rounded-full blur-3xl -mr-48 -mt-48"></div>
+      <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-blue-500/10 to-purple-600/5 rounded-full blur-3xl -ml-48 -mb-48"></div>
+      
+      {/* Subtle code elements */}
+      <div className="absolute top-1/4 left-1/6 text-5xl text-orange-500/10 font-mono transform -rotate-12">{`{`}</div>
+      <div className="absolute top-1/3 right-1/6 text-4xl text-blue-500/10 font-mono transform rotate-12">{`}`}</div>
+      
+      <div className="relative z-10 mb-12 text-center max-w-3xl">
+        <div className="flex justify-center mb-6">
+          <img src="/logo.png" alt="PLOPL" className="w-[18rem]" />
+        </div>
+        
+        <h1 className="font-black mb-4 leading-tight">
+          <div className="text-4xl bg-clip-text text-transparent bg-gradient-to-r from-orange-500 to-orange-600 mb-3">
             Trustless Off-chain to On-chain Integration
-            <br />
-
-            <span className="text-4xl">
-              Made Easy!
-            </span>
+          </div>
+          <div className="text-5xl text-slate-800">
+            Made Easy!
           </div>
         </h1>
-        <p className="text-slate-700 text-md font-medium mt-6 max-w-xl">
+        
+        <div className="flex justify-center gap-3 my-6">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-700">
+            zkTLS
+          </span>
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-700">
+            Privacy
+          </span>
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
+            Web3
+          </span>
+        </div>
+        
+        <p className="text-slate-700 text-lg font-medium mt-6 max-w-2xl mx-auto">
           PLOPL is a developer-friendly toolkit that enables trustless integration of off-chain data
           to on-chain systems using zkTLS technology.
         </p>
@@ -74,9 +97,7 @@ export default function LoginPage() {
         <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full opacity-10 blur-xl"></div>
 
         <div className="mb-10 flex flex-col items-center relative">
-          <img src="/logo.png" alt="logo" className="w-[14rem]" />
-
-          <h2 className="mt-8 text-3xl font-bold text-slate-800">
+          <h2 className="mt-2 text-3xl font-bold text-slate-800">
             Welcome to <span className="bg-gradient-to-r from-primary-500 to-primary-600 bg-clip-text text-transparent">Plopl</span>
           </h2>
           <p className="mt-3 text-slate-600 font-medium">

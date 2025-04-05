@@ -1215,6 +1215,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                   onClick={parseCurlCommand}
                   className="bg-blue-500 hover:bg-blue-600 text-white"
                   disabled={!curlCommand || loadingResponse}
+                  isLoading={loadingResponse} 
                 >
                   {loadingResponse ? 'Processing...' : 'Parse & Execute'}
                 </Button>

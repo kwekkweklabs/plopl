@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "../../../../plopl-extension"
+		},
+		{
+			"path": "../../.."
+		},
+		{
+			"path": "../../../../plopl-backend"
+		}
+	]
+}
