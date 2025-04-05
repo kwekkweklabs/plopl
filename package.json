@@ -39,9 +39,12 @@
     "module-manager": "pnpm -F module-manager start"
   },
   "dependencies": {
+    "comlink": "^4.4.2",
     "ethers": "^6.13.5",
+    "http-parser-js": "^0.5.9",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "react-dom": "19.0.0",
+    "tlsn-js": "0.1.0-alpha.9.1"
   },
   "devDependencies": {
     "@eslint/compat": "^1.2.5",

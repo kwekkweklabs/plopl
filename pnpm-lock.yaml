@@ -8,15 +8,24 @@ importers:
 
   .:
     dependencies:
+      comlink:
+        specifier: ^4.4.2
+        version: 4.4.2
       ethers:
         specifier: ^6.13.5
         version: 6.13.5
+      http-parser-js:
+        specifier: ^0.5.9
+        version: 0.5.9
       react:
         specifier: 19.0.0
         version: 19.0.0
       react-dom:
         specifier: 19.0.0
         version: 19.0.0(react@19.0.0)
+      tlsn-js:
+        specifier: 0.1.0-alpha.9.1
+        version: 0.1.0-alpha.9.1
     devDependencies:
       '@eslint/compat':
         specifier: ^1.2.5
@@ -2402,6 +2411,9 @@ packages:
   colorette@2.0.20:
     resolution: {integrity: sha512-IfEDxwoWIjkeXL1eXcDiow4UbKjhLdq6/EuSVR9GMN7KVH3r9gQ83e73hsz1Nd1T3ijd5xv1wcWRYO+D6kCI2w==}
 
+  comlink@4.4.2:
+    resolution: {integrity: sha512-OxGdvBmJuNKSCMO4NTl1L47VRp6xn2wG4F/2hYzB6tiCb709otOxtEYCSvK80PtjODfXXZu8ds+Nw5kVCjqd2g==}
+
   commander@11.1.0:
     resolution: {integrity: sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ==}
     engines: {node: '>=16'}
@@ -3347,6 +3359,9 @@ packages:
 
   htmlparser2@9.1.0:
     resolution: {integrity: sha512-5zfg6mHUoaer/97TxnGpxmbR7zJtPwIYFMZ/H5ucTlPZhKvtum05yiPK3Mgai3a0DyVxv7qYqoweaEd2nrYQzQ==}
+
+  http-parser-js@0.5.9:
+    resolution: {integrity: sha512-n1XsPy3rXVxlqxVioEWdC+0+M+SQw0DpJynwtOPo1X+ZlvdzTLtDBIJJlDQTnwZIFJrZSzSGmIOUdP8tu+SgLw==}
 
   http-proxy-agent@7.0.2:
     resolution: {integrity: sha512-T1gkAiYYDWYx3V5Bmyu7HcfcvL7mUrTWiM6yOfa3PIphViJ/gFPbvidQ+veqSOHci/PxBcDabeUNCzpOODJZig==}
@@ -4881,6 +4896,13 @@ packages:
   tinyrainbow@1.2.0:
     resolution: {integrity: sha512-weEDEq7Z5eTHPDh4xjX789+fHfF+P8boiFB+0vbWzpbnbsEr/GRaohi/uMKxg8RZMXnl1ItAi/IUHWMsjDV7kQ==}
     engines: {node: '>=14.0.0'}
+
+  tlsn-js@0.1.0-alpha.9.1:
+    resolution: {integrity: sha512-nWYLfelc3vqQ7zcUjsYF42ItBRPd3ITdJaNdQLSym/85MCSJbv1VDtoLfVZzuiCKV55HWUvYZu0O7p+eRLhzTA==}
+    engines: {node: '>= 16.20.2'}
+
+  tlsn-wasm@0.1.0-alpha.9:
+    resolution: {integrity: sha512-/7DKVXzFdlzD9vwsROb/tvGHJ+xHlAbvaVjMGBWOrecG5KR+Dcg6QMSb4R0/2jePX6u8r6JNXbRpKgQ+yf1zaA==}
 
   tmp@0.0.33:
     resolution: {integrity: sha512-jRCJlojKnZ3addtTOjdIqoRuPEKBvNXcGYqzO6zWZX8KfKEpnGY5jfggJQ3EjKuu8D4bJRr0y+cYJFmYbImXGw==}
@@ -7250,6 +7272,8 @@ snapshots:
 
   colorette@2.0.20: {}
 
+  comlink@4.4.2: {}
+
   commander@11.1.0: {}
 
   commander@12.1.0: {}
@@ -8592,6 +8616,8 @@ snapshots:
       domutils: 3.1.0
       entities: 4.5.0
 
+  http-parser-js@0.5.9: {}
+
   http-proxy-agent@7.0.2:
     dependencies:
       agent-base: 7.1.1
@@ -8946,7 +8972,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 22.7.4
+      '@types/node': 22.7.5
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -10304,6 +10330,12 @@ snapshots:
       setimmediate: 1.0.5
 
   tinyrainbow@1.2.0: {}
+
+  tlsn-js@0.1.0-alpha.9.1:
+    dependencies:
+      tlsn-wasm: 0.1.0-alpha.9
+
+  tlsn-wasm@0.1.0-alpha.9: {}
 
   tmp@0.0.33:
     dependencies:

@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { BACKEND_URL, USER_WALLET_ADDRESS, CHAINS, UW_PK } from '../../constants';
 import { ethers } from 'ethers';
 import { RegistryABI } from './lib/RegistryABI';
+import { Prover, Presentation, NotaryServer, Transcript, mapStringToRange, subtractRanges } from 'tlsn-js';
+import { HTTPParser } from 'http-parser-js';
 
 // Schema types
 interface SchemaResponse {
@@ -313,74 +315,165 @@ const SidePanel = () => {
     try {
       if (capturedApiData) {
         console.log('Captured API data:', capturedApiData);
-        console.log('API data being used for proof:', capturedApiData);
         console.log('chainId:', selectedChain.id);
         console.log('schemaData:', schemaData);
 
         const bodyData = schemaData?.schema?.request?.args?.json;
         capturedApiData.request.body = bodyData;
 
-        // Call http://localhost:3710/verify with all the captured data as body
-        const proof = await fetch(`http://localhost:3710/verify?schemaId=${ploplSchemaId}`, {
-          method: 'POST',
-          body: JSON.stringify(capturedApiData),
-        });
+        // Use TLSNotary for verification
+        const notaryUrl = 'http://localhost:7047';
+        const websocketProxyUrl = 'http://localhost:7047/proxy';
+        const serverUrl = capturedApiData.url;
+        const serverDns = new URL(serverUrl).hostname;
 
-        const response = await proof.json();
-        console.log('Proof:', response);
+        console.time('tlsn-verification');
 
-        if (response.isValid) {
-          //   {
-          //     "isValid": true,
-          //     "s": {
-          //         "pSig": "0x99e274111f3ffa29c3c1a16ea54671cb2096fe2be0cd1fac26262db36e11d46341d5bba0384e8138cdd47eece76be566c5de6d67fcf5951f1553e2f6770ea05c1b",
-          //         "nSig": "0x99e274111f3ffa29c3c1a16ea54671cb2096fe2be0cd1fac26262db36e11d46341d5bba0384e8138cdd47eece76be566c5de6d67fcf5951f1553e2f6770ea05c1b",
-          //         "combinedHash": "0xb34b1d1d63bb0e46dc01fc1828513c37a2783952da6f3385faa4cd0c62c5f192",
-          //         "plop": "0xde11988d1d5d241f78b60a80d848a269a3b6ddb93258ce6587cee51dd55dc01b"
-          //     }
-          // }
-          // const mySig = await signer.signMessage(ethers.getBytes(combinedHash))
+        try {
+          // Initialize TLSNotary components
+          const notary = NotaryServer.from(notaryUrl);
 
-          // const tx = await PloplRegistryContract.submitPlop(
-          //   ploplId,
-          //   pSig,
-          //   nSig,
-          //   mySig,
-          //   []
-          // )
+          // Direct approach using tlsn-js
+          // Step 1: Create a prover instance
+          const prover = await new Prover({
+            serverDns: serverDns,
+            maxRecvData: 4096, // Increase buffer size for larger responses
+          });
 
-          // await tx.wait()
+          // Step 2: Set up the prover with the notary
+          await prover.setup(await notary.sessionUrl());
 
-          // Start the on-chain submission process
-          setIsSubmittingOnchain(true);
+          // Step 3: Send the request using the captured API data
+          const response = await prover.sendRequest(websocketProxyUrl, {
+            url: serverUrl,
+            method: capturedApiData.request.method as any, // Cast to any to avoid type error
+            headers: capturedApiData.request.headers || {},
+            body: capturedApiData.request.body || {},
+          });
 
-          const _selectedChain = CHAINS.find(chain => chain.id === parseInt(selectedChain.id.toString()));
-          const provider = new ethers.JsonRpcProvider(_selectedChain?.rpcUrl);
-          const signer = new ethers.Wallet(UW_PK, provider);
+          console.log('TLSNotary response:', response);
 
-          const mySig = await signer.signMessage(ethers.getBytes(response.s.combinedHash));
+          // Step 4: Get the transcript from the exchange
+          const transcript = await prover.transcript();
+          const { sent, recv } = transcript;
 
-          const PlopRegistryContract = new ethers.Contract(_selectedChain?.registryContract || '', RegistryABI, signer);
-          console.log('PlopRegistryContract:', PlopRegistryContract);
-          const tx = await PlopRegistryContract.submitPlop(
-            response.s.plop,
-            response.s.pSig,
-            response.s.nSig,
-            mySig,
-            [],
+          // Step 5: Create a commit for the entire message (we're not selectively revealing)
+          const commit = {
+            sent: [{ start: 0, end: sent.length }],
+            recv: [{ start: 0, end: recv.length }],
+          };
+
+          // Step 6: Notarize the commit
+          const notarizationOutputs = await prover.notarize(commit);
+
+          if (!notarizationOutputs) {
+            throw new Error('Failed to notarize TLS session');
+          }
+
+          // Step 7: Create a presentation from the notarization outputs
+          const presentation = await new Presentation({
+            attestationHex: notarizationOutputs.attestation,
+            secretsHex: notarizationOutputs.secrets,
+            notaryUrl: notarizationOutputs.notaryUrl,
+            websocketProxyUrl: notarizationOutputs.websocketProxyUrl,
+            reveal: commit,
+          });
+
+          // Step 8: Verify the presentation
+          const verificationResult = await presentation.verify();
+          console.log('Verification result:', verificationResult);
+
+          if (!verificationResult) {
+            throw new Error('TLSNotary proof verification failed');
+          }
+
+          // Step 9: Extract the data needed for contract submission
+          const verifyingKeyBytes = await presentation.verifyingKey();
+
+          // Create hash from transcript data for contract parameters
+          const sentData = Buffer.from(sent);
+          const recvData = Buffer.from(recv);
+
+          // Create combined hash from the proof data
+          const combinedData = Buffer.concat([sentData, recvData]);
+          const combinedHash = ethers.keccak256(combinedData);
+
+          // Generate the PLOP identifier from the proof
+          // Get server info from verification result instead
+          const serverName = verificationResult.server_name || serverDns;
+          const connectionTime = verificationResult.connection_info?.time || Date.now();
+          const plopData = Buffer.concat([
+            Buffer.from(serverName),
+            Buffer.from(String(connectionTime)),
+            Buffer.from(verifyingKeyBytes.data || []),
+          ]);
+          const plopId = ethers.keccak256(plopData);
+
+          // Generate signatures
+          const signingKey = new ethers.SigningKey(UW_PK);
+          const pSig = await signingKey.sign(combinedHash);
+          const nSig = await signingKey.sign(
+            ethers.keccak256(
+              Buffer.concat([Buffer.from(plopId.slice(2), 'hex'), Buffer.from(combinedHash.slice(2), 'hex')]),
+            ),
           );
 
-          console.log('Minting tx:', tx);
-          const receipt = await tx.wait();
+          // Format for contract submission
+          const proofResult = {
+            isValid: true,
+            s: {
+              pSig: pSig.serialized,
+              nSig: nSig.serialized,
+              combinedHash,
+              plop: plopId,
+            },
+          };
 
-          // Store the transaction hash
-          setCompletedTxHash(receipt.hash);
-          console.log('Minting tx confirmed', tx);
+          console.timeEnd('tlsn-verification');
+          console.log('Prepared proof data for contract:', proofResult);
 
-          setCurrentStep(4); // Done
-        } else {
-          // Verification failed
-          setVerificationError("You don't meet the current data requirements needed for this PLOP");
+          if (proofResult.isValid) {
+            // Start the on-chain submission process
+            setIsSubmittingOnchain(true);
+
+            const _selectedChain = CHAINS.find(chain => chain.id === parseInt(selectedChain.id.toString()));
+            const provider = new ethers.JsonRpcProvider(_selectedChain?.rpcUrl);
+            const signer = new ethers.Wallet(UW_PK, provider);
+
+            const mySig = await signer.signMessage(ethers.getBytes(proofResult.s.combinedHash));
+
+            const PlopRegistryContract = new ethers.Contract(
+              _selectedChain?.registryContract || '',
+              RegistryABI,
+              signer,
+            );
+
+            console.log('PlopRegistryContract:', PlopRegistryContract);
+            const tx = await PlopRegistryContract.submitPlop(
+              proofResult.s.plop,
+              proofResult.s.pSig,
+              proofResult.s.nSig,
+              mySig,
+              [],
+            );
+
+            console.log('Minting tx:', tx);
+            const receipt = await tx.wait();
+
+            // Store the transaction hash
+            setCompletedTxHash(receipt.hash);
+            console.log('Minting tx confirmed', tx);
+
+            setCurrentStep(4); // Done
+          } else {
+            // Verification failed
+            setVerificationError("You don't meet the current data requirements needed for this PLOP");
+          }
+        } catch (error) {
+          console.error('TLSNotary error:', error);
+          setVerificationError(
+            'Error during TLSNotary verification: ' + (error instanceof Error ? error.message : String(error)),
+          );
         }
       } else {
         console.log('No API data captured');
@@ -395,6 +488,36 @@ const SidePanel = () => {
       setIsVerifying(false);
       setIsSubmittingOnchain(false);
     }
+  };
+
+  // Helper function to parse HTTP messages
+  const parseHttpMessage = (buffer: Buffer, type: 'request' | 'response') => {
+    const parser = new HTTPParser(type === 'request' ? HTTPParser.REQUEST : HTTPParser.RESPONSE);
+    const info: Record<string, unknown> = {};
+    const headers: string[] = [];
+    const body: Buffer[] = [];
+
+    parser.onHeadersComplete = function (response: Record<string, unknown>) {
+      Object.keys(response).forEach(key => {
+        info[key] = response[key];
+      });
+    };
+
+    // Using onHeaders instead of onHeader as per linter
+    parser.onHeaders = function (headerList: string[]) {
+      headers.push(...headerList);
+    };
+
+    parser.onBody = function (chunk: unknown, offset: number, length: number) {
+      if (Buffer.isBuffer(chunk)) {
+        body.push(chunk.slice(offset, offset + length));
+      }
+    };
+
+    parser.execute(buffer, 0, buffer.length);
+    parser.finish();
+
+    return { info, headers, body };
   };
 
   // Helper function to display request body data in a readable format
