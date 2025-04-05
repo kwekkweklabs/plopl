@@ -2,6 +2,9 @@ import { exec } from "child_process";
 import { prismaQuery } from "../lib/prisma.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { generateBytes32Id, getAlphanumericId } from "../utils/miscUtils.js";
+import axios from "axios";
+import { CHAINS } from '../../config.js';
+import { RegistryABI } from '../lib/RegistryABI.js';
 
 /**
  *
@@ -67,6 +70,56 @@ export const schemaRoute = (app, _, done) => {
     return reply.status(200).send(schemas)
   })
 
+
+  app.get('/index-plopls', async (request, reply) => {
+    try {
+      const { chainId, registryAddress } = request.query;
+
+    const selectedChain = CHAINS.find(chain => chain.id === parseInt(chainId));
+
+    if (!selectedChain) {
+      return reply.status(400).send({ error: 'Chain not found' });
+    }
+
+    if (parseInt(chainId) === 84532 || parseInt(chainId) === 80002) {
+      let protocol = ''
+      let network = ''
+      if (parseInt(chainId) === 84532) {
+        protocol = 'base'
+        network = 'sepolia'
+      } else {
+        protocol = 'polygon'
+        network = 'amoy'
+      }
+
+      console.log(`Indexing ${protocol} ${network} plopls`)
+      const res = await axios({
+        method: 'POST',
+        url: `https://web3.nodit.io/v1/${protocol}/${network}/blockchain/searchEvents`,
+        headers: {
+          'X-API-KEY': process.env.NODIT_API_KEY
+        },
+        data: {
+          contractAddress: registryAddress,
+          eventNames: [
+            "PlopSubmitted"
+          ],
+          abi: RegistryABI
+        },
+        // 2 days ago
+        fromDate: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+        toDate: new Date().toISOString()
+      })
+
+      console.log(res.data)
+    }
+
+      return reply.status(200).send('Indexing completed')
+    } catch (error) {
+      console.log(error)
+      return reply.status(500).send({ error: 'Error indexing plopls' })
+    }
+  })
 
   done();
 }
