@@ -838,11 +838,12 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                                   e.stopPropagation();
                                   
                                   const foundItem = value.find(item => item[propKey]);
-                                  let value = foundItem?.[propKey];
+                                  let foundValue = foundItem?.[propKey];
                                   
                                   // Just add the field, the condition editor will handle the rest
                                   const fieldPath = `${path}.find(${propKey})`;
-                                  handleSelectField(fieldPath, value);
+                                  handleSelectField(fieldPath, foundValue);
+                                  setOpenFindDropdown(null);
                                 }}
                                 title={`Find by ${propKey}`}
                               >
