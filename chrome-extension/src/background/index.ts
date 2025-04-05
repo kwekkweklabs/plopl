@@ -1,5 +1,15 @@
 // PLOPL Background Service Worker
 
+// Handle extension icon click - open side panel
+chrome.action.onClicked.addListener(tab => {
+  // This will only fire if no default_popup is defined or if it fails to open
+  if (tab.id) {
+    // Open the side panel for the current tab
+    chrome.sidePanel.open({ tabId: tab.id });
+    console.log('Opened side panel for tab:', tab.id);
+  }
+});
+
 // Define the schema structure we need to work with
 interface SchemaData {
   id: string;
@@ -262,9 +272,6 @@ chrome.webRequest.onSendHeaders.addListener(
       console.log('Content-Type header:', contentType);
     }
 
-    // Count how many headers we got
-    const headerCount = Object.keys(headers).length;
-
     // Check if this matches our schema before proceeding
     if (matchesSchema(url, method, {}, activeSchema)) {
       console.log('=== DETECTED SCHEMA MATCH ===');
@@ -299,7 +306,7 @@ chrome.webRequest.onSendHeaders.addListener(
 
       console.log('Captured request headers for:', url);
 
-      // Critical fix: After a short delay, check if we need to create a temporary response
+      // Critical fix: After a longer delay, check if we need to create a temporary response
       // This ensures we don't get stuck on step 2 if the content script doesn't capture the response
       setTimeout(() => {
         // Only proceed if we still don't have response data
@@ -319,11 +326,22 @@ chrome.webRequest.onSendHeaders.addListener(
           capturedRequests[requestId].responseData = tempResponse;
 
           // Notify the side panel to advance to step 3
-          notifySidePanel(capturedRequests[requestId]);
-
-          // We'll update this with real data when the actual response comes in
+          // Only notify if we have a body, otherwise we might be too early
+          if (capturedRequests[requestId].requestData.body !== null) {
+            console.log('Request has body, notifying side panel');
+            notifySidePanel(capturedRequests[requestId]);
+          } else {
+            console.log('No request body yet, waiting a bit longer...');
+            // Try again after a short delay to see if body has been captured
+            setTimeout(() => {
+              if (capturedRequests[requestId]) {
+                console.log('Sending notification with whatever data we have');
+                notifySidePanel(capturedRequests[requestId]);
+              }
+            }, 1000);
+          }
         }
-      }, 2000); // Wait 2 seconds to see if the real response arrives
+      }, 3000); // Increased from 2000 to 3000 ms to give more time for body capture
     }
   },
   { urls: ['<all_urls>'] },
@@ -349,6 +367,10 @@ chrome.webRequest.onBeforeRequest.addListener(
 
     // Update our stored request with the body
     if (capturedRequests[details.requestId]) {
+      // Save the previous body if there was one
+      const hadBodyBefore = capturedRequests[details.requestId].requestData.body !== null;
+
+      // Update the body
       capturedRequests[details.requestId].requestData.body = requestBody;
 
       // Save to storage
@@ -367,6 +389,21 @@ chrome.webRequest.onBeforeRequest.addListener(
         // If we already have a response for this request, notify the side panel immediately
         if (capturedRequests[details.requestId].responseData) {
           console.log('Request already has response data, notifying side panel immediately');
+          notifySidePanel(capturedRequests[details.requestId]);
+        } else if (!hadBodyBefore) {
+          // If we didn't have a body before, this is new information
+          // Notify the side panel that we now have body data
+          console.log('Newly received body data, notifying side panel');
+
+          // Create a temporary response if needed to advance UI
+          capturedRequests[details.requestId].responseData = {
+            status: 100, // 100 Continue status
+            statusText: 'Continue',
+            headers: {},
+            body: { message: 'Request with body captured, waiting for full response' },
+            timestamp: new Date().toISOString(),
+          };
+
           notifySidePanel(capturedRequests[details.requestId]);
         }
       } else {

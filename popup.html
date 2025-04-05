@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PLOPL - Opening Side Panel</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 12px;
+      width: 200px;
+      font-family: system-ui, -apple-system, sans-serif;
+      text-align: center;
+      background-color: #fff;
+      color: #333;
+    }
+    .message {
+      margin-top: 10px;
+      color: #ff541e;
+      font-weight: 500;
+    }
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 84, 30, 0.3);
+      border-radius: 50%;
+      border-top-color: #ff541e;
+      animation: spin 1s ease-in-out infinite;
+      margin-bottom: 10px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="loading"></div>
+  <div class="message">Opening side panel...</div>
+  
+  <script>
+    // Open the side panel and close this popup
+    (async function() {
+      try {
+        // Get the current tab
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        const currentTab = tabs[0];
+        
+        if (currentTab && currentTab.id) {
+          // Open the side panel for this tab
+          await chrome.sidePanel.open({ tabId: currentTab.id });
+          
+          // Give a short delay before closing the popup to ensure side panel is opened
+          setTimeout(() => window.close(), 500);
+        } else {
+          document.querySelector('.message').textContent = 'Error: Could not find current tab';
+        }
+      } catch (error) {
+        document.querySelector('.message').textContent = 'Error: ' + error.message;
+      }
+    })();
+  </script>
+</body>
+</html> 

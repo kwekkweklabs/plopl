@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PLOPL Side Panel</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    iframe {
+      border: none;
+      height: 100%;
+      width: 100%;
+      display: block;
+    }
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      width: 100%;
+      position: absolute;
+      background-color: white;
+      z-index: 1;
+      transition: opacity 0.3s ease-out;
+    }
+    .spinner {
+      width: 30px;
+      height: 30px;
+      border: 3px solid rgba(255, 84, 30, 0.2);
+      border-radius: 50%;
+      border-top-color: #ff541e;
+      animation: spin 1s ease-in-out infinite;
+      margin-bottom: 15px;
+    }
+    .loading-text {
+      color: #ff541e;
+      font-weight: 500;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading indicator -->
+  <div id="loading" class="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading PLOPL...</div>
+  </div>
+  
+  <!-- The side panel content -->
+  <iframe src="side-panel/index.html" id="side-panel-iframe" onload="hideLoader()"></iframe>
+
+  <script>
+    // Hide the loader when the iframe is loaded
+    function hideLoader() {
+      const loader = document.getElementById('loading');
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(() => {
+          loader.style.display = 'none';
+        }, 300);
+      }
+    }
+  </script>
+</body>
+</html> 
