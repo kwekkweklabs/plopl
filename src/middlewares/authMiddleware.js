@@ -22,6 +22,7 @@ export const authMiddleware = async (request, reply) => {
       const verifiedClaims = await privy.verifyAuthToken(token);
       authData = verifiedClaims;
 
+
       userData = await privy.getUserById(authData.userId);
     } catch (error) {
       console.log(`Token verification failed with error ${error}.`);

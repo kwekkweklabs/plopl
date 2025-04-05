@@ -12,7 +12,11 @@ import { generateBytes32Id, getAlphanumericId } from "../utils/miscUtils.js";
 export const schemaRoute = (app, _, done) => {
   // To get all the schemas, for the explore page
   app.get('/explore', async (request, reply) => {
-    const schemas = await prismaQuery.schema.findMany({})
+    const schemas = await prismaQuery.schema.findMany({
+      orderBy: {
+        createdAt: 'desc'
+      }
+    })
 
     return reply.status(200).send(schemas)
   })
@@ -30,20 +34,23 @@ export const schemaRoute = (app, _, done) => {
   app.post('/create', {
     preHandler: [authMiddleware]
   }, async (request, reply) => {
-    const { name, description, schema, chainId } = request.body;
+    const { name, description, schema, chainId, registryId, registryAddress } = request.body;
 
     const sluggedName = name.toLowerCase().replace(/ /g, '-');
     const seedString = `plopl-${chainId}-${sluggedName}-${getAlphanumericId(4)}`
-    const bytes32Id = generateBytes32Id(seedString);
+
+    schema.id = `${chainId}-${registryId}`
 
     const newSchema = await prismaQuery.schema.create({
       data: {
         id: seedString,
-        bytes32Id: bytes32Id,
         name: name,
         description: description,
         schema: schema,
-        userId: request.user.id
+        userId: request.user.id,
+        registryId: registryId,
+        registryAddress: registryAddress,
+        chainId: parseInt(chainId)
       }
     })
 
