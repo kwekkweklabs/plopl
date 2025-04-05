@@ -13,6 +13,7 @@ interface SchemaResponse {
   bytes32Id: string;
   name: string;
   description: string;
+  registryAddress: string;
   schema: {
     id: number;
     slug: string;
@@ -442,11 +443,7 @@ const SidePanel = () => {
 
             const mySig = await signer.signMessage(ethers.getBytes(proofResult.s.combinedHash));
 
-            const PlopRegistryContract = new ethers.Contract(
-              _selectedChain?.registryContract || '',
-              RegistryABI,
-              signer,
-            );
+            const PlopRegistryContract = new ethers.Contract(schemaData?.registryAddress || '', RegistryABI, signer);
 
             console.log('PlopRegistryContract:', PlopRegistryContract);
             const tx = await PlopRegistryContract.submitPlop(
@@ -463,6 +460,14 @@ const SidePanel = () => {
             // Store the transaction hash
             setCompletedTxHash(receipt.hash);
             console.log('Minting tx confirmed', tx);
+
+            // Log transaction hash to the local server
+            try {
+              await fetch(`http://localhost:3710/schema/log-tx?txHash=${receipt.hash}&chainId=${selectedChain.id}`);
+              console.log('Transaction logged to server');
+            } catch (logError) {
+              console.error('Failed to log transaction:', logError);
+            }
 
             setCurrentStep(4); // Done
           } else {
