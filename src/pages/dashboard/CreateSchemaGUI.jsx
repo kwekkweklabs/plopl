@@ -64,7 +64,19 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
       // Since we don't get parsed info back, we'll use a simplified approach
       const urlMatch = curlCommand.match(/curl ['"]([^'"]+)['"]/);
       const methodMatch = curlCommand.match(/-X ([A-Z]+)/);
-      const dataMatch = curlCommand.match(/(-d|--data|--data-raw) ['"](.+?)['"]/s);
+      
+      // Improved data extraction to handle --data-raw and multiline data
+      let dataMatch;
+      if (curlCommand.includes('--data-raw')) {
+        // Handle --data-raw specifically
+        dataMatch = curlCommand.match(/--data-raw\s+(['"])(.*?)\1/s);
+      } else if (curlCommand.includes('--data')) {
+        // Handle --data flag
+        dataMatch = curlCommand.match(/--data\s+(['"])(.*?)\1/s);
+      } else if (curlCommand.includes(' -d ')) {
+        // Handle -d flag
+        dataMatch = curlCommand.match(/-d\s+(['"])(.*?)\1/s);
+      }
       
       if (urlMatch) {
         const url = urlMatch[1];
@@ -76,7 +88,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
         
         // Try to parse the data payload if it exists
         let data = {};
-        if (dataMatch) {
+        if (dataMatch && dataMatch[2]) {
           try {
             const dataString = dataMatch[2];
             // Try to parse as JSON if it looks like JSON
@@ -88,6 +100,8 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
             }
           } catch (e) {
             console.warn('Failed to parse data as JSON:', e);
+            // If it fails to parse, still keep the raw data
+            data = dataMatch[2];
           }
         }
         
@@ -163,7 +177,6 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
     }
   };
   
-  // Rest of the component functions remain the same...
   // Handle selecting a field from the JSON response
   const handleSelectField = (path, value) => {
     // Add field to selected fields if not already selected
@@ -172,9 +185,17 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
       
       // Add default condition based on value type
       let defaultCondition = '';
-      if (Array.isArray(value)) {
+      
+      // Determine if this is a find operation
+      const isFindOperation = path.includes('.find(');
+      
+      if (path.includes('length()')) {
+        // Special handling for length fields - set default '>=' operator
+        defaultCondition = `x >= ${value}`;
+      } else if (Array.isArray(value)) {
         defaultCondition = `x.length() >= ${value.length}`;
       } else if (typeof value === 'number') {
+        // For numeric values, default to equals but will have all numeric operators
         defaultCondition = `x === ${value}`;
       } else if (typeof value === 'string') {
         defaultCondition = `x === '${value}'`;
@@ -247,12 +268,24 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
   // Parse condition string into operator and value
   const parseCondition = (condition) => {
     // Order is important - check triple equals first
-    const operators = ['===', '!==', '>=', '<=', '==', '!=', '>', '<'];
+    const operators = ['===', '!==', '>=', '<=', '>', '<', '==', '!='];
     let operator = '==='; // Default to triple equals
     let value = '';
     
     if (!condition) {
       return { operator, value };
+    }
+    
+    // Special handling for array length() conditions
+    if (condition.includes('length()')) {
+      for (const op of operators) {
+        if (condition.includes(op)) {
+          operator = op;
+          const parts = condition.split(op);
+          value = parts[1]?.trim() || '';
+          return { operator, value };
+        }
+      }
     }
     
     // Try to find an operator in the condition
@@ -266,13 +299,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
       }
     }
     
-    // Handle special cases like length()
-    if (condition.includes('length()')) {
-      operator = '>=';
-      value = condition.split('>=')[1]?.trim() || '';
-    }
-    
-    // Handle includes, startsWith, endsWith
+    // Handle special case methods - includes, startsWith, endsWith
     if (condition.includes('.includes(')) {
       operator = 'contains';
       const match = condition.match(/\.includes\('([^']*)'\)/);
@@ -300,41 +327,48 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
     switch (type) {
       case 'string':
         return [
-          { value: '===', label: 'equals (===)' },
-          { value: '!==', label: 'not equals (!==)' },
+          { value: '===', label: '==' },
+          { value: '!==', label: '!=' },
           { value: 'contains', label: 'contains' },
           { value: 'startsWith', label: 'starts with' },
           { value: 'endsWith', label: 'ends with' }
         ];
       case 'number':
         return [
-          { value: '===', label: 'equals (===)' },
-          { value: '!==', label: 'not equals (!==)' },
-          { value: '>', label: 'greater than (>)' },
-          { value: '>=', label: 'greater than or equals (>=)' },
-          { value: '<', label: 'less than (<)' },
-          { value: '<=', label: 'less than or equals (<=)' }
+          { value: '===', label: '==' },
+          { value: '!==', label: '!=' },
+          { value: '>', label: '>' },
+          { value: '>=', label: '>=' },
+          { value: '<', label: '<' },
+          { value: '<=', label: '<=' }
         ];
       case 'boolean':
         return [
-          { value: '===', label: 'equals (===)' },
-          { value: '!==', label: 'not equals (!==)' }
+          { value: '===', label: '==' },
+          { value: '!==', label: '!=' }
         ];
-      case 'object':
       case 'array':
         return [
-          { value: '!==', label: 'is not null (!==)' },
-          { value: '===', label: 'is null (===)' }
+          { value: '>=', label: '>=' },
+          { value: '>', label: '>' },
+          { value: '===', label: '==' },
+          { value: '<', label: '<' },
+          { value: '<=', label: '<=' }
+        ];
+      case 'object':
+        return [
+          { value: '!==', label: '!= null' },
+          { value: '===', label: '== null' }
         ];
       case 'null':
         return [
-          { value: '===', label: 'is null (===)' },
-          { value: '!==', label: 'is not null (!==)' }
+          { value: '===', label: '== null' },
+          { value: '!==', label: '!= null' }
         ];
       default:
         return [
-          { value: '===', label: 'equals (===)' },
-          { value: '!==', label: 'not equals (!==)' }
+          { value: '===', label: '==' },
+          { value: '!==', label: '!=' }
         ];
     }
   };
@@ -554,41 +588,474 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
     }
   }, [formData.description]);
 
-  // For brevity, we'll create a simplified JsonTreeExplorer component
+  // Clean JSON tree explorer component
   const JsonTreeExplorer = ({ data, path = '' }) => {
+    // State for collapsed nodes
+    const [collapsedPaths, setCollapsedPaths] = useState({});
+    // State for truncated text values
+    const [expandedValues, setExpandedValues] = useState({});
+    // State for hovered elements to show actions
+    const [hoveredPath, setHoveredPath] = useState(null);
+    // State to track open find dropdowns
+    const [openFindDropdown, setOpenFindDropdown] = useState(null);
+    // State to track if we're currently interacting with a dropdown
+    const [isInteractingWithDropdown, setIsInteractingWithDropdown] = useState(false);
+    
+    // Toggle collapse state
+    const toggleCollapse = (nodePath) => {
+      setCollapsedPaths(prev => ({
+        ...prev,
+        [nodePath]: !prev[nodePath]
+      }));
+    };
+    
+    // Toggle text expansion
+    const toggleExpand = (e, valuePath) => {
+      e.stopPropagation();
+      setExpandedValues(prev => ({
+        ...prev,
+        [valuePath]: !prev[valuePath]
+      }));
+    };
+    
+    // Check if a node should be collapsed
+    const isCollapsed = (nodePath) => {
+      return !!collapsedPaths[nodePath];
+    };
+    
+    // Check if a value should be expanded
+    const isExpanded = (valuePath) => {
+      return !!expandedValues[valuePath];
+    };
+    
+    // Truncate a string if needed
+    const truncateString = (str, maxLength = 50) => {
+      if (!str || typeof str !== 'string') return str;
+      if (str.length <= maxLength) return str;
+      return str.substring(0, maxLength) + '...';
+    };
+    
+    // Toggle find dropdown - completely rewritten
+    const toggleFindDropdown = (e, path) => {
+      e.stopPropagation();
+      e.preventDefault();
+      setIsInteractingWithDropdown(true);
+      
+      if (openFindDropdown === path) {
+        setOpenFindDropdown(null);
+      } else {
+        setOpenFindDropdown(path);
+      }
+      
+      // Add a small delay to avoid immediate closing
+      setTimeout(() => {
+        setIsInteractingWithDropdown(false);
+      }, 100);
+    };
+    
+    // Reset find dropdown when user clicks elsewhere
+    useEffect(() => {
+      const handleClickOutside = () => {
+        if (!isInteractingWithDropdown) {
+          setOpenFindDropdown(null);
+        }
+      };
+      
+      document.addEventListener('click', handleClickOutside);
+      return () => {
+        document.removeEventListener('click', handleClickOutside);
+      };
+    }, [isInteractingWithDropdown]);
+    
+    // Render JSON value with proper formatting
+    const renderValue = (value, path, indent = 0) => {
+      // For null or undefined
+      if (value === null || value === undefined) {
+        return (
+          <div className="flex items-center py-0.5">
+            <span 
+              className="text-gray-500 font-mono text-xs px-1.5 py-0.5 rounded cursor-pointer hover:bg-gray-100"
+              onClick={() => handleSelectField(path, value)}
+              onMouseEnter={() => setHoveredPath(path)}
+              onMouseLeave={() => setHoveredPath(null)}
+            >
+              null
+            </span>
+          </div>
+        );
+      }
+      
+      // For primitive values (string, number, boolean)
+      if (typeof value !== 'object') {
+        let displayValue;
+        let valueClass;
+        let isLongText = false;
+        
+        if (typeof value === 'string') {
+          isLongText = value.length > 50;
+          displayValue = isExpanded(path) || !isLongText 
+            ? `"${value.replace(/&quot;/g, '"')}"` 
+            : `"${truncateString(value)}"`;
+          valueClass = "text-primary-600";
+        } else if (typeof value === 'number') {
+          displayValue = value.toString();
+          valueClass = "text-blue-600";
+        } else if (typeof value === 'boolean') {
+          displayValue = value.toString();
+          valueClass = "text-purple-600";
+        } else {
+          displayValue = String(value);
+          valueClass = "text-gray-700";
+        }
+        
+        return (
+          <div className="flex items-center py-0.5">
+            <span 
+              className={`font-mono text-xs ${valueClass} px-1.5 py-0.5 rounded cursor-pointer hover:bg-gray-100 hover:border-gray-200`}
+              onClick={() => handleSelectField(path, value)}
+              onMouseEnter={() => setHoveredPath(path)}
+              onMouseLeave={() => setHoveredPath(null)}
+            >
+              {displayValue}
+              {isLongText && (
+                <button 
+                  onClick={(e) => toggleExpand(e, path)} 
+                  className="ml-1 text-gray-500 underline text-[10px]"
+                >
+                  {isExpanded(path) ? "show less" : "show more"}
+                </button>
+              )}
+            </span>
+          </div>
+        );
+      }
+      
+      // For arrays and objects
+      const isArray = Array.isArray(value);
+      const bracketColor = isArray ? "text-amber-500" : "text-indigo-500";
+      const isEmpty = Object.keys(value).length === 0;
+      const nodeCollapsed = isCollapsed(path);
+      const isHovered = hoveredPath === path;
+      const hasFindOpen = openFindDropdown === path;
+      
+      // Empty arrays/objects
+      if (isEmpty) {
+        return (
+          <div className="flex items-center py-0.5">
+            <span 
+              className={`font-mono text-xs ${bracketColor} px-1.5 py-0.5 rounded cursor-pointer hover:bg-gray-100`}
+              onClick={() => handleSelectField(path, value)}
+              onMouseEnter={() => setHoveredPath(path)}
+              onMouseLeave={() => setHoveredPath(null)}
+            >
+              {isArray ? '[]' : '{}'}
+            </span>
+          </div>
+        );
+      }
+      
+      // For non-empty objects/arrays
+      return (
+        <div className="my-0.5 relative">
+          <div 
+            className="flex items-center"
+            onMouseEnter={() => setHoveredPath(path)}
+            onMouseLeave={() => !hasFindOpen && setHoveredPath(null)}
+          >
+            <button 
+              onClick={() => toggleCollapse(path)}
+              className="mr-1 w-4 h-4 flex items-center justify-center rounded hover:bg-gray-100 transition-colors focus:outline-none"
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className={`h-3 w-3 transition-transform duration-200 ${nodeCollapsed ? 'transform rotate-0' : 'transform rotate-90'}`} 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            
+            <span 
+              className={`font-mono text-xs ${bracketColor} cursor-pointer px-1.5 py-0.5 hover:bg-gray-100 rounded`}
+              onClick={() => handleSelectField(path, value)}
+            >
+              {isArray ? '[' : '{'}
+              <span className="mx-1 text-xs text-gray-500">
+                {isArray ? `Array(${value.length})` : `Object(${Object.keys(value).length})`}
+              </span>
+              {isArray && (isHovered || hasFindOpen) && (
+                <span className="ml-1 inline-flex gap-1">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectField(`${path}.length()`, value.length);
+                    }}
+                    className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded hover:bg-amber-100"
+                  >
+                    length()
+                  </button>
+                  {value.length > 0 && typeof value[0] === 'object' && value[0] !== null && (
+                    <div className="relative inline-block">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); 
+                          e.preventDefault();
+                          toggleFindDropdown(e, path);
+                        }}
+                        className={`text-[10px] ${hasFindOpen ? 'bg-amber-200' : 'bg-amber-50'} text-amber-600 px-1.5 py-0.5 rounded hover:bg-amber-100 relative`}
+                      >
+                        find(...)
+                      </button>
+                      
+                      {/* Always render the dropdown, but conditionally show it */}
+                      <div 
+                        className={`absolute left-0 top-6 bg-white shadow-md border border-gray-200 rounded-md p-2 z-20 min-w-[200px] ${hasFindOpen ? 'block' : 'hidden'}`}
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseEnter={(e) => e.stopPropagation()}
+                        onMouseLeave={(e) => e.stopPropagation()}
+                      >
+                        <div className="text-[10px] text-gray-500 mb-1 px-1">Find by property:</div>
+                        <div className="grid grid-cols-2 xs:grid-cols-3 gap-1.5 max-w-xs">
+                          {Object.keys(value[0]).slice(0, 9).map(propKey => {
+                            // Get the first non-null value of this property
+                            const sampleValue = value.find(item => item[propKey] !== undefined && item[propKey] !== null)?.[propKey];
+                            const valueType = typeof sampleValue;
+                            const bgColor = valueType === 'string' 
+                              ? 'bg-primary-50 hover:bg-primary-100' 
+                              : valueType === 'number' 
+                                ? 'bg-blue-50 hover:bg-blue-100' 
+                                : valueType === 'boolean'
+                                  ? 'bg-purple-50 hover:bg-purple-100'
+                                  : 'bg-gray-50 hover:bg-gray-100';
+                            
+                            return (
+                              <button
+                                key={propKey}
+                                className={`text-[10px] ${bgColor} px-2 py-1 rounded-md text-left truncate`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  
+                                  const foundItem = value.find(item => item[propKey]);
+                                  let value = foundItem?.[propKey];
+                                  
+                                  // Just add the field, the condition editor will handle the rest
+                                  const fieldPath = `${path}.find(${propKey})`;
+                                  handleSelectField(fieldPath, value);
+                                }}
+                                title={`Find by ${propKey}`}
+                              >
+                                {propKey}
+                                <span className="ml-1 opacity-50 text-[8px]">
+                                  {valueType === 'string' ? 'abc' : 
+                                   valueType === 'number' ? '123' :
+                                   valueType === 'boolean' ? 'T/F' : '{}'}
+                                </span>
+                              </button>
+                            );
+                          })}
+                          {Object.keys(value[0]).length > 9 && (
+                            <span className="text-[10px] text-gray-400 col-span-2 text-center mt-1 italic">
+                              + {Object.keys(value[0]).length - 9} more properties
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </span>
+              )}
+            </span>
+          </div>
+          
+          {!nodeCollapsed && (
+            <div className="ml-4 pl-2 border-l border-gray-200">
+              {isArray ? (
+                // Array items
+                value.map((item, index) => (
+                  <div key={index} className="py-0.5">
+                    <div className="flex items-start">
+                      <span className="text-xs font-mono bg-gray-100 text-gray-600 rounded px-1 mr-1 leading-loose">
+                        [{index}]
+                      </span>
+                      {renderValue(item, `${path}[${index}]`, indent + 1)}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                // Object properties
+                Object.entries(value).map(([key, propValue]) => {
+                  const propPath = path ? `${path}.${key}` : key;
+                  const isPropHovered = hoveredPath === propPath;
+                  const isArrayValue = Array.isArray(propValue) && propValue.length > 0;
+                  
+                  return (
+                    <div key={key} className="py-0.5">
+                      <div 
+                        className="flex items-start"
+                        onMouseEnter={() => setHoveredPath(propPath)}
+                        onMouseLeave={() => setHoveredPath(null)}
+                      >
+                        <span className="text-xs font-mono text-indigo-600 mr-1 leading-loose">
+                          {key}:
+                        </span>
+                        {renderValue(propValue, propPath, indent + 1)}
+                        
+                        {/* Show array helpers inline when hovering over array properties */}
+                        {isArrayValue && isPropHovered && (
+                          <div className="ml-2 inline-flex items-center gap-1">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectField(`${propPath}.length()`, propValue.length);
+                              }}
+                              className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded hover:bg-amber-100"
+                            >
+                              length()
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+          
+          <span className={`font-mono text-xs ${bracketColor}`}>
+            {isArray ? ']' : '}'}
+          </span>
+        </div>
+      );
+    };
+
     return (
       <div className="bg-white rounded-xl p-4 overflow-auto">
-        <pre className="text-sm">{formatJson(data)}</pre>
-        <div className="mt-3 text-sm text-gray-500">
-          Click on values in the response to add match conditions
-        </div>
+        {renderValue(data, path)}
       </div>
     );
   };
   
+  // Compact array helper for bottom display
+  const CompactArrayHelperBar = ({ arrays }) => {
+    if (!arrays || !arrays.length) return null;
+    
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mt-4">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-sm font-medium text-gray-700 flex items-center">
+            <span className="bg-amber-100 text-amber-600 p-1 rounded mr-2 text-xs">[]</span>
+            Array Helpers
+          </h3>
+          <span className="text-xs text-gray-500">{arrays.length} arrays found</span>
+        </div>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+          {arrays.map(({ path, data }) => (
+            <div key={path} className="border border-gray-100 rounded-lg bg-gray-50 p-2">
+              <div className="text-xs font-medium font-mono text-gray-700 mb-1 truncate" title={path}>
+                {path} <span className="text-gray-500">({data.length})</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                <button
+                  className="text-[10px] bg-primary-50 text-primary-600 px-2 py-0.5 rounded-full hover:bg-primary-100 transition-colors"
+                  onClick={() => handleSelectField(`${path}.length()`, data.length)}
+                >
+                  length()
+                </button>
+                
+                {data.length > 0 && typeof data[0] === 'object' && data[0] !== null &&
+                  Object.keys(data[0]).slice(0, 3).map(propKey => {
+                    // Get the first non-null value of this property
+                    const sampleValue = data.find(item => item[propKey] !== undefined && item[propKey] !== null)?.[propKey];
+                    const valueType = typeof sampleValue;
+                    
+                    return (
+                      <button
+                        key={propKey}
+                        className="text-[10px] bg-primary-50 text-primary-600 px-2 py-0.5 rounded-full hover:bg-primary-100 transition-colors"
+                        onClick={() => {
+                          const foundItem = data.find(item => item[propKey]);
+                          let value = foundItem?.[propKey];
+                          
+                          // Just add the field, the condition editor will handle the rest
+                          const fieldPath = `${path}.find(${propKey})`;
+                          handleSelectField(fieldPath, value);
+                        }}
+                      >
+                        find({propKey})
+                      </button>
+                    );
+                  })
+                }
+                
+                {data.length > 0 && typeof data[0] === 'object' && Object.keys(data[0]).length > 3 && (
+                  <span className="text-[10px] text-gray-500">...</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   // Simplified version of the ConditionEditor component
   const ConditionEditor = ({ field, condition, onChange, onRemove }) => {
-    // Determine value type from the condition
-    const fieldPath = field.toLowerCase();
+    // Determine value type from the condition and field path
+    const fieldPath = field?.toLowerCase() || '';
     const isArray = fieldPath.includes('length()');
+    const isFindOperation = fieldPath.includes('.find(');
     const isBoolean = condition?.includes('true') || condition?.includes('false');
     const isString = condition?.includes("'");
     const isNull = condition?.includes("null");
     
-    // Parse the current condition first to get the operator and value
-    const { operator, value } = parseCondition(condition || 'x === ');
+    // Parse the current condition to get the operator and value
+    const { operator: initialOperator, value: initialValue } = parseCondition(condition || 'x === ');
     
+    // Use local state to avoid re-renders during typing
+    const [localValue, setLocalValue] = useState(initialValue);
+    const [localOperator, setLocalOperator] = useState(initialOperator);
+    
+    // Keep local state in sync with props when condition changes externally
+    useEffect(() => {
+      const { operator, value } = parseCondition(condition || 'x === ');
+      setLocalOperator(operator);
+      setLocalValue(value);
+    }, [condition]);
+    
+    // Determine value type - prioritize detecting the actual type of the value
     let valueType = 'string';
-    if (isArray) valueType = 'array';
-    else if (isBoolean) valueType = 'boolean';
-    else if (isNull) valueType = 'null';
-    else if (!isString && !isNaN(value)) valueType = 'number';
+    
+    // Try to infer type based on the value
+    if (!isString && !isNaN(initialValue)) {
+      valueType = 'number';
+    } else if (isArray) {
+      valueType = 'array';
+    } else if (isBoolean) {
+      valueType = 'boolean';
+    } else if (isNull) {
+      valueType = 'null';
+    } else if (isString) {
+      valueType = 'string';
+    }
+    
+    // For find operations, we need to check if it's a find by number or by string
+    // and ensure appropriate operators are available
+    if (isFindOperation) {
+      // For find operations, if value is numeric, make sure it's treated as number
+      if (!isNaN(initialValue) && !isString) {
+        valueType = 'number';
+      }
+    }
     
     // Get appropriate operators for this value type
     const operators = getOperatorsForType(valueType);
     
     // Create the human-readable explanation
-    const explanation = getConditionExplanation(field, operator, value, valueType);
+    const explanation = getConditionExplanation(field, localOperator, localValue, valueType);
     
     // Helper to build the full condition string
     const buildConditionString = (op, val) => {
@@ -616,6 +1083,19 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
       return `x ${op} ${formattedValue}`;
     };
     
+    // Update the parent only when focus is lost or operator changes
+    const handleValueBlur = () => {
+      const newCondition = buildConditionString(localOperator, localValue);
+      onChange(newCondition);
+    };
+    
+    // Change operator and immediately update parent
+    const handleOperatorChange = (op) => {
+      setLocalOperator(op);
+      const newCondition = buildConditionString(op, localValue);
+      onChange(newCondition);
+    };
+    
     return (
       <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
         <div className="flex justify-between items-start mb-2">
@@ -638,7 +1118,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
           
           <div className="flex space-x-2 mb-2">
             {/* Fixed 'x' input */}
-            <div className="w-12">
+            <div className="w-10">
               <Input
                 value="x"
                 disabled
@@ -646,37 +1126,45 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
               />
             </div>
             
-            {/* Operator dropdown */}
-            <div className="w-1/3">
-              <Select
-                value={operator || '==='}
-                onChange={(e) => {
-                  const newOp = e.target.value;
-                  const newCondition = buildConditionString(newOp, value);
-                  onChange(newCondition);
-                }}
-                className="w-full text-sm rounded-lg"
-              >
+            {/* Replace Select with simple button group */}
+            <div className="w-[40%]">
+              <div className="flex flex-wrap gap-1 h-full items-center">
                 {operators && operators.length > 0 ? operators.map((op) => (
-                  <SelectItem key={op.value} value={op.value}>
+                  <button
+                    key={op.value}
+                    type="button"
+                    onClick={() => handleOperatorChange(op.value)}
+                    className={`px-2 py-1 text-xs rounded-md ${
+                      localOperator === op.value 
+                        ? 'bg-blue-500 text-white' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
                     {op.label}
-                  </SelectItem>
+                  </button>
                 )) : (
-                  <SelectItem value="===">equals (===)</SelectItem>
+                  <button
+                    type="button"
+                    className="px-2 py-1 text-xs rounded-md bg-blue-500 text-white"
+                  >
+                    ==
+                  </button>
                 )}
-              </Select>
+              </div>
             </div>
             
             {/* Value input */}
             <div className="flex-1">
               <Input
-                value={value}
-                onChange={(e) => {
-                  const newVal = e.target.value;
-                  const newCondition = buildConditionString(operator, newVal);
-                  onChange(newCondition);
+                value={localValue}
+                onChange={(e) => setLocalValue(e.target.value)}
+                onBlur={handleValueBlur}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.target.blur();
+                  }
                 }}
-                placeholder={valueType === 'string' ? 'Text value' : valueType === 'number' ? '123' : 'Value'}
+                placeholder={valueType === 'string' ? 'Text value' : valueType === 'number' || valueType === 'array' ? '123' : 'Value'}
                 disabled={valueType === 'null'}
                 className="w-full text-sm rounded-lg"
               />
@@ -757,32 +1245,50 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                     <div className="grid grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium mb-1">Method</label>
-                        <Select 
-                          name="request.method"
-                          value={formData.request.method}
-                          onChange={handleChange}
-                          className="w-full"
-                        >
-                          <SelectItem value="GET">GET</SelectItem>
-                          <SelectItem value="POST">POST</SelectItem>
-                          <SelectItem value="PUT">PUT</SelectItem>
-                          <SelectItem value="DELETE">DELETE</SelectItem>
-                        </Select>
+                        <div className="flex gap-2 flex-wrap">
+                          {['GET', 'POST', 'PUT', 'DELETE'].map(method => (
+                            <button
+                              key={method}
+                              type="button"
+                              onClick={() => {
+                                handleChange({
+                                  target: { name: 'request.method', value: method }
+                                });
+                              }}
+                              className={`px-3 py-1.5 text-sm rounded-md ${
+                                formData.request.method === method
+                                  ? 'bg-blue-500 text-white' 
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {method}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       
                       <div className="col-span-2">
                         <label className="block text-sm font-medium mb-1">Response Method</label>
-                        <Select 
-                          name="response.request.method"
-                          value={formData.response.request.method}
-                          onChange={handleChange}
-                          className="w-full"
-                        >
-                          <SelectItem value="GET">GET</SelectItem>
-                          <SelectItem value="POST">POST</SelectItem>
-                          <SelectItem value="PUT">PUT</SelectItem>
-                          <SelectItem value="DELETE">DELETE</SelectItem>
-                        </Select>
+                        <div className="flex gap-2 flex-wrap">
+                          {['GET', 'POST', 'PUT', 'DELETE'].map(method => (
+                            <button
+                              key={method}
+                              type="button"
+                              onClick={() => {
+                                handleChange({
+                                  target: { name: 'response.request.method', value: method }
+                                });
+                              }}
+                              className={`px-3 py-1.5 text-sm rounded-md ${
+                                formData.response.request.method === method
+                                  ? 'bg-blue-500 text-white' 
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {method}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                     
@@ -853,92 +1359,146 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
           </div>
         )}
         
-        {/* Step 2: Response Matching - Simplified version */}
+        {/* Step 2: Response Matching - With fullscreen functionality */}
         {activeStep === 2 && (
           <div className="space-y-6">
-            <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
+            <div className={`${fullscreenExplorer ? 'fixed inset-0 z-50 bg-white p-4' : 'bg-gray-50 p-6 rounded-lg border border-gray-200'}`} ref={fullscreenRef}>
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Select fields to match</h2>
-              </div>
-              
-              <p className="text-gray-600 mb-4">
-                Click on fields in the response that you want to validate. You can then set conditions for each field.
-              </p>
-              
-              <div className="flex flex-col md:flex-row gap-4">
-                {/* JSON Explorer Area - simplified */}
-                <div className="flex-grow">
-                  {testResponse ? (
-                    <div className="space-y-3">
-                      <h3 className="text-lg font-medium text-gray-800">Response Data</h3>
-                      <JsonTreeExplorer data={testResponse} />
-                    </div>
-                  ) : (
-                    <div className="h-64 flex items-center justify-center bg-gray-100 rounded-xl">
-                      <div className="text-center p-8 max-w-md">
-                        <h3 className="text-xl font-medium text-gray-700 mb-2">No Response Data</h3>
-                        <p className="text-gray-500">
-                          Execute the API call in the first step to see response data.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Selected Fields Panel */}
-                <div className="md:w-1/3 flex-shrink-0">
-                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                      <h4 className="font-medium text-gray-700">
-                        Selected Fields
-                      </h4>
-                      <span className="bg-primary-50 text-primary-600 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                        {selectedFields.length} selected
+                {!fullscreenExplorer ? (
+                  <>
+                    <h2 className="text-xl font-semibold">Select fields to match</h2>
+                    <button 
+                      onClick={toggleFullscreen}
+                      className="bg-gray-500 text-white text-sm px-3 py-1 rounded hover:bg-gray-600 flex items-center"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+                      </svg>
+                      View Fullscreen
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center">
+                      <h2 className="text-xl font-semibold">Response Explorer</h2>
+                      <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded ml-3">
+                        {selectedFields.length} fields selected
                       </span>
                     </div>
-                    
-                    <div className="p-3">
-                      {selectedFields.length === 0 ? (
-                        <div className="text-center p-6 bg-gray-50 rounded-lg text-gray-500">
-                          <div className="mb-2">No fields selected yet</div>
-                          <p className="text-xs">Click on values in the response to add conditions</p>
+                    <button 
+                      onClick={toggleFullscreen}
+                      className="bg-gray-500 text-white text-sm px-3 py-1 rounded hover:bg-gray-600 flex items-center"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Exit Fullscreen
+                    </button>
+                  </>
+                )}
+              </div>
+              
+              {!fullscreenExplorer && (
+                <p className="text-gray-600 mb-4">
+                  Click on fields in the response that you want to validate. You can then set conditions for each field.
+                </p>
+              )}
+              
+              {/* Fullscreen Layout - Split into main area (JSON) and sidebar (selected fields) */}
+              <div className="flex flex-col h-[calc(100vh-80px)]">
+                {/* Main content area with JSON explorer */}
+                <div className="flex flex-grow gap-4 overflow-hidden">
+                  {/* JSON Explorer Area */}
+                  <div className="flex-grow overflow-auto pr-4">
+                    {testResponse ? (
+                      <div className="space-y-3">
+                        <h3 className="text-lg font-medium text-gray-800">Response Data</h3>
+                        
+                        {/* JSON tree explorer */}
+                        <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 overflow-auto h-[calc(100%-50px)]">
+                          <JsonTreeExplorer data={testResponse} />
                         </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {selectedFields.map((field, index) => (
-                            <ConditionEditor
-                              key={index}
-                              field={field}
-                              condition={fieldConditions[index]}
-                              onChange={(newCondition) => updateCondition(index, newCondition)}
-                              onRemove={() => removeSelectedField(index)}
-                            />
-                          ))}
+                      </div>
+                    ) : (
+                      <div className="h-full flex items-center justify-center">
+                        <div className="text-center p-8 max-w-md">
+                          <div className="text-6xl mb-4">🔍</div>
+                          <h3 className="text-2xl font-medium text-gray-700 mb-2">No Response Data</h3>
+                          <p className="text-gray-500">
+                            Execute the API call in the first step to see and select response data for your schema.
+                          </p>
                         </div>
-                      )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Selected Fields Panel */}
+                  <div className="w-[320px] flex-shrink-0 overflow-auto">
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                      <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                        <h4 className="font-medium text-gray-700 flex items-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          Selected Fields
+                        </h4>
+                        <span className="bg-primary-50 text-primary-600 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                          {selectedFields.length} selected
+                        </span>
+                      </div>
+                      
+                      <div className="p-3">
+                        {selectedFields.length === 0 ? (
+                          <div className="text-center p-6 bg-gray-50 rounded-lg text-gray-500">
+                            <div className="mb-2">No fields selected yet</div>
+                            <p className="text-xs">Click on any value in the response to add it as a condition field</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {selectedFields.map((field, index) => (
+                              <ConditionEditor
+                                key={index}
+                                field={field}
+                                condition={fieldConditions[index]}
+                                onChange={(newCondition) => updateCondition(index, newCondition)}
+                                onRemove={() => removeSelectedField(index)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
+                
+                {/* Array helpers - fixed at bottom */}
+                {testResponse && (
+                  <div className="mt-3 flex-shrink-0">
+                    <CompactArrayHelperBar arrays={findArrays(testResponse)} />
+                  </div>
+                )}
               </div>
             </div>
             
-            <div className="flex justify-between">
-              <Button
-                type="button"
-                onClick={goToPrevStep}
-                className="bg-gray-500 hover:bg-gray-600 text-white"
-              >
-                Back to API Call
-              </Button>
-              <Button
-                type="button"
-                onClick={goToNextStep}
-                className="bg-orange-500 hover:bg-orange-600 text-white"
-                disabled={selectedFields.length === 0}
-              >
-                Continue to Recipe Details
-              </Button>
-            </div>
+            {!fullscreenExplorer && (
+              <div className="flex justify-between">
+                <Button
+                  type="button"
+                  onClick={goToPrevStep}
+                  className="bg-gray-500 hover:bg-gray-600 text-white"
+                >
+                  Back to API Call
+                </Button>
+                <Button
+                  type="button"
+                  onClick={goToNextStep}
+                  className="bg-orange-500 hover:bg-orange-600 text-white"
+                  disabled={selectedFields.length === 0}
+                >
+                  Continue to Recipe Details
+                </Button>
+              </div>
+            )}
           </div>
         )}
         
@@ -946,58 +1506,33 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
         {activeStep === 3 && (
           <div className="space-y-6">
             <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
-              <h2 className="text-xl font-semibold mb-4">Basic Recipe Details</h2>
+              <h2 className="text-xl font-semibold mb-4">Recipe Details</h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Recipe ID</label>
-                  <Input 
-                    name="id"
-                    value={formData.id}
+                  <label className="block text-sm font-medium mb-2">Description</label>
+                  <Textarea
+                    name="description"
+                    value={formData.description}
                     onChange={handleChange}
-                    placeholder="1"
-                    type="number"
+                    placeholder="Prove you've attended at least two ETHGlobal events, one of which must be ETHGlobal Singapore."
                     className="w-full"
+                    rows={3}
                   />
-                  <p className="text-gray-500 mt-1 text-xs">Unique numeric identifier</p>
+                  <p className="text-gray-500 mt-1 text-xs">A short explanation of what this recipe proves</p>
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Slug</label>
+                  <label className="block text-sm font-medium mb-2">Prepare URL</label>
                   <Input 
-                    name="slug"
-                    value={formData.slug}
+                    name="prepareUrl"
+                    value={formData.prepareUrl}
                     onChange={handleChange}
-                    placeholder="ethglobal-event-check"
+                    placeholder="https://ethglobal.com/home"
                     className="w-full"
                   />
-                  <p className="text-gray-500 mt-1 text-xs">Readable unique identifier (auto-generated from description)</p>
+                  <p className="text-gray-500 mt-1 text-xs">URL the user must visit to log in before the API call</p>
                 </div>
-              </div>
-              
-              <div className="mt-4">
-                <label className="block text-sm font-medium mb-2">Description</label>
-                <Textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  placeholder="Prove you've attended at least two ETHGlobal events, one of which must be ETHGlobal Singapore."
-                  className="w-full"
-                  rows={3}
-                />
-                <p className="text-gray-500 mt-1 text-xs">A short explanation of what this recipe proves</p>
-              </div>
-              
-              <div className="mt-4">
-                <label className="block text-sm font-medium mb-2">Prepare URL</label>
-                <Input 
-                  name="prepareUrl"
-                  value={formData.prepareUrl}
-                  onChange={handleChange}
-                  placeholder="https://ethglobal.com/home"
-                  className="w-full"
-                />
-                <p className="text-gray-500 mt-1 text-xs">URL the user can visit to log in before the API call</p>
               </div>
             </div>
             

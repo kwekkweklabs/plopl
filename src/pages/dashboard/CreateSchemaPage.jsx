@@ -2,8 +2,18 @@ import { useAuth } from '@/providers/AuthProvider';
 import { Button } from '@heroui/react';
 import React, { useState } from 'react';
 import axios from 'axios';
+import { wrap } from 'comlink';
 import CreateSchemaGUI from './CreateSchemaGUI';
 import CreateSchemaManual from './CreateSchemaManual';
+
+// Setup worker
+const { worker, terminate } = (() => {
+  const worker = new Worker(new URL('./worker.js', import.meta.url), {
+    type: 'module'
+  });
+  const { remote, terminate } = wrap(worker);
+  return { worker: remote, terminate };
+})();
 
 export default function CreateSchemaPage() {
   const { accessToken } = useAuth();
