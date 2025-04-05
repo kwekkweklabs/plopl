@@ -17,9 +17,12 @@ export const authMiddleware = async (request, reply) => {
     }
 
     let authData = null;
+    let userData = null;
     try {
       const verifiedClaims = await privy.verifyAuthToken(token);
       authData = verifiedClaims;
+
+      userData = await privy.getUserById(authData.userId);
     } catch (error) {
       console.log(`Token verification failed with error ${error}.`);
       return reply.code(401).send({
@@ -29,7 +32,7 @@ export const authMiddleware = async (request, reply) => {
 
     const user = await prismaQuery.user.findUnique({
       where: {
-        walletAddress: authData.walletAddress
+        walletAddress: userData?.wallet?.address
       }
     });
 

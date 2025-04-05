@@ -1,3 +1,4 @@
+import { exec } from "child_process";
 import { prismaQuery } from "../lib/prisma.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { generateBytes32Id, getAlphanumericId } from "../utils/miscUtils.js";
@@ -14,6 +15,16 @@ export const schemaRoute = (app, _, done) => {
     const schemas = await prismaQuery.schema.findMany({})
 
     return reply.status(200).send(schemas)
+  })
+
+  app.get('/:id', async (request, reply) => {
+    const { id } = request.params;
+
+    const schema = await prismaQuery.schema.findUnique({
+      where: { id }
+    })
+
+    return reply.status(200).send(schema)
   })
 
   app.post('/create', {
@@ -48,6 +59,7 @@ export const schemaRoute = (app, _, done) => {
 
     return reply.status(200).send(schemas)
   })
+
 
   done();
 }
