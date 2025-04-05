@@ -15,4 +15,15 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    proxy: {
+      '/api-proxy': {
+        target: 'https://api2.ethglobal.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-proxy/, ''),
+        secure: false,
+      },
+      // Add more proxy endpoints as needed for other APIs
+    }
+  }
 });
