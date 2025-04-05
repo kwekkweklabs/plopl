@@ -195,7 +195,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
       } else if (Array.isArray(value)) {
         defaultCondition = `x.length() >= ${value.length}`;
       } else if (typeof value === 'number') {
-        // For numeric values, default to equals but will have all numeric operators
+        // For numeric values, default to equals but will have all numeric operatorsi
         defaultCondition = `x === ${value}`;
       } else if (typeof value === 'string') {
         defaultCondition = `x === '${value}'`;
@@ -277,7 +277,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
     }
     
     // Special handling for array length() conditions
-    if (condition.includes('length()')) {
+    if (condition.includes('length()') || condition.includes('[]')) {
       for (const op of operators) {
         if (condition.includes(op)) {
           operator = op;
@@ -375,12 +375,12 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
   
   // Generate human-readable explanation for a condition
   const getConditionExplanation = (field, operator, value, valueType) => {
-    const fieldName = field.split('.').pop();
+    const fieldName = field.split('.').pop().replace('[]', '');
     const isFindOperation = field.includes('.find(');
     
     // Special handling for find operations
     if (isFindOperation) {
-      const arrayPath = field.split('.find(')[0];
+      const arrayPath = field.split('.find(')[0].replace('[]', '');
       const propName = field.match(/\.find\(([^)]+)\)/)?.[1];
       
       switch (operator) {
@@ -790,7 +790,8 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleSelectField(`${path}.length()`, value.length);
+                      // Update path to include [] for array notation per schema requirements
+                      handleSelectField(`${path}[].length()`, value.length);
                     }}
                     className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded hover:bg-amber-100"
                   >
@@ -841,7 +842,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                                   let foundValue = foundItem?.[propKey];
                                   
                                   // Just add the field, the condition editor will handle the rest
-                                  const fieldPath = `${path}.find(${propKey})`;
+                                  const fieldPath = `${path}[].find(${propKey})`;
                                   handleSelectField(fieldPath, foundValue);
                                   setOpenFindDropdown(null);
                                 }}
@@ -909,7 +910,8 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleSelectField(`${propPath}.length()`, propValue.length);
+                                // Update path to include [] for array notation per schema requirements
+                                handleSelectField(`${propPath}[].length()`, propValue.length);
                               }}
                               className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded hover:bg-amber-100"
                             >
@@ -982,7 +984,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
                           let value = foundItem?.[propKey];
                           
                           // Just add the field, the condition editor will handle the rest
-                          const fieldPath = `${path}.find(${propKey})`;
+                          const fieldPath = `${path}[].find(${propKey})`;
                           handleSelectField(fieldPath, value);
                         }}
                       >
@@ -1007,7 +1009,7 @@ export default function CreateSchemaGUI({ onSubmit, initialData = {} }) {
   const ConditionEditor = ({ field, condition, onChange, onRemove }) => {
     // Determine value type from the condition and field path
     const fieldPath = field?.toLowerCase() || '';
-    const isArray = fieldPath.includes('length()');
+    const isArray = fieldPath.includes('length()') || fieldPath.includes('[]');
     const isFindOperation = fieldPath.includes('.find(');
     const isBoolean = condition?.includes('true') || condition?.includes('false');
     const isString = condition?.includes("'");
