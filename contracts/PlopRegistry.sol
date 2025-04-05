@@ -28,18 +28,16 @@ contract PlopRegistry is IPlopRegistry {
 
     mapping(address => PlopData) private _plopData;
     mapping(address => bool) public isNotary;
-    address[] private _notaries;
 
-    // Events
     event PlopSubmitted(
         address indexed user,
         bytes32 indexed plop,
         address notary,
         uint256 timestamp
     );
+
     event NotaryUpdated(address indexed notaryAddress, bool isNotary);
 
-    // Custom errors
     error InvalidPloplSignature();
     error InvalidNotarySignature();
     error InvalidUserSignature();
@@ -61,7 +59,6 @@ contract PlopRegistry is IPlopRegistry {
     ) external override {
         address ploplAuthAddress = ploplAuth.getPloplSigner();
 
-        // Verify signatures using library
         if (!plop.verifySigner(ploplSignature, ploplAuthAddress)) {
             revert InvalidPloplSignature();
         }
@@ -76,11 +73,10 @@ contract PlopRegistry is IPlopRegistry {
         );
 
         address user = combinedHash.recoverSigner(userSignature);
-        if (user == address(0)) {
+        if (user == address(0) || user != msg.sender) {
             revert InvalidUserSignature();
         }
 
-        // Store all data in a single struct to optimize gas
         _plopData[user] = PlopData({
             plop: plop,
             timestamp: block.timestamp,
@@ -93,34 +89,33 @@ contract PlopRegistry is IPlopRegistry {
     }
 
     function hasValidPlop(address user) external view override returns (bool) {
-        return _plopData[user].plop != bytes32(0);
-    }
-
-    function getPlopTimestamp(bytes32 plop) external view returns (uint256) {
-        address owner = recoverOwner(plop);
-        return owner != address(0) ? _plopData[owner].timestamp : 0;
-    }
-
-    function recoverOwner(bytes32 plop) public view override returns (address) {
-        uint256 len = _notaries.length;
-        for (uint256 i = 0; i < len; ) {
-            address potentialOwner = _notaries[i];
-            if (_plopData[potentialOwner].plop == plop) {
-                return potentialOwner;
-            }
-            unchecked {
-                ++i;
-            }
-        }
-        return address(0);
+        PlopData storage data = _plopData[user];
+        return (data.plop != bytes32(0) && isNotary[data.notaryUsed]);
     }
 
     function recoverUserPlopData(
         address user
-    ) external view returns (bytes32 combinedData, uint256 timestamp) {
+    )
+        external
+        view
+        override
+        returns (
+            bytes32 combinedData,
+            uint256 timestamp,
+            bytes32 rawPlop,
+            address notaryUsed,
+            bytes[] memory encData
+        )
+    {
         PlopData storage data = _plopData[user];
         if (data.plop == bytes32(0)) revert PlopNotFound();
-        return (data.signedHash, data.timestamp);
+        return (
+            data.signedHash,
+            data.timestamp,
+            data.plop,
+            data.notaryUsed,
+            data.encData
+        );
     }
 
     function verifyUserSignature(
@@ -137,29 +132,7 @@ contract PlopRegistry is IPlopRegistry {
         bool _isNotary
     ) external override {
         if (msg.sender != address(ploplAuth)) revert NotManager();
-
-        if (_isNotary && !isNotary[notaryAddress]) {
-            isNotary[notaryAddress] = true;
-            _notaries.push(notaryAddress);
-        } else if (!_isNotary && isNotary[notaryAddress]) {
-            isNotary[notaryAddress] = false;
-            uint256 len = _notaries.length;
-            for (uint256 i = 0; i < len; ) {
-                if (_notaries[i] == notaryAddress) {
-                    _notaries[i] = _notaries[len - 1];
-                    _notaries.pop();
-                    break;
-                }
-                unchecked {
-                    ++i;
-                }
-            }
-        }
-
+        isNotary[notaryAddress] = _isNotary;
         emit NotaryUpdated(notaryAddress, _isNotary);
-    }
-
-    function getNotaries() external view override returns (address[] memory) {
-        return _notaries;
     }
 }

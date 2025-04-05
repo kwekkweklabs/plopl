@@ -29,27 +29,26 @@ interface IPlopRegistry {
     function hasValidPlop(address user) external view returns (bool);
 
     /**
-     * @dev Get the timestamp of when the Plop was created
-     * @param plop The proof data
-     * @return The timestamp of the Plop
-     */
-    function getPlopTimestamp(bytes32 plop) external view returns (uint256);
-
-    /**
-     * @dev Recovers the owner address from a proof
-     * @param proof The proof data
-     * @return The owner's address
-     */
-    function recoverOwner(bytes32 proof) external view returns (address);
-
-    /**
      * @dev Recovers the user plop data
      * @param user The address of the user
-     * @return The plop data and timestamp
+     * @return combinedData The combined hash of plop and signatures
+     * @return timestamp The timestamp when the plop was submitted
+     * @return rawPlop The original plop data
+     * @return notaryUsed The address of the notary that signed this plop
+     * @return encryptedData Any additional encrypted data stored with the plop
      */
     function recoverUserPlopData(
         address user
-    ) external view returns (bytes32, uint256);
+    )
+        external
+        view
+        returns (
+            bytes32 combinedData,
+            uint256 timestamp,
+            bytes32 rawPlop,
+            address notaryUsed,
+            bytes[] memory encryptedData
+        );
 
     /**
      * @dev Update notary status of an address
@@ -57,10 +56,4 @@ interface IPlopRegistry {
      * @param isNotary Whether this address should be a notary
      */
     function updateNotary(address notaryAddress, bool isNotary) external;
-
-    /**
-     * @dev Get all notaries
-     * @return Array of notary addresses
-     */
-    function getNotaries() external view returns (address[] memory);
 }
