@@ -30,16 +30,16 @@ export const CHAINS = isTestnet ? [
     name: 'Polygon Amoy Testnet',
     logo: '/chain-polygon.png',
     rpcUrl: `https://polygon-amoy.nodit.io/${import.meta.env.VITE_NODIT_API_KEY}`,
-    managerContract: '',
-    registryContract: '',
+    managerContract: '0xb03A1229B8B71cD5C97Abd10BE0238700970a770',
+    registryContract: '0x5c6d990Faef0a400724e67d7c8A31E9AC25eD579',
   },
   {
     id: 48899,
     name: 'Zircuit Testnet',
     logo: '/chain-zircuit.png',
     rpcUrl: `https://testnet.zircuit.com`,
-    managerContract: '',
-    registryContract: '',
+    managerContract: '0x6527800Ef9f9c0772e064F5302592A354b1D07Cc',
+    registryContract: '0x0eA5714bb9fbe8E6031821173055fae04ba783Cb',
   }
 ] : [
   {
